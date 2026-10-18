@@ -41,6 +41,14 @@ Android TV / Google TV remotes and also works on phones.
   **OK** opens a channel, **hold OK** adds it to Favourites, **Back** returns.
 - Full-screen player on TV.
 
+**Player**
+- **Play / Pause** button over the video. On a TV remote: press any button
+  to show the controls, **OK** pauses or plays, and the remote's
+  **play/pause** key works too. The controls fade away after 4 seconds.
+- **Full screen** on phones: tap the button and the video fills the screen
+  in landscape with the system bars hidden. Back or the button returns.
+- Favourite star, quality picker and a LIVE badge on the video.
+
 ## Screenshots
 
 Android TV (1920×1080):

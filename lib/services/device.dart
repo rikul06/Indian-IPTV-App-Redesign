@@ -7,7 +7,15 @@ class Device {
 
   static bool isTv = false;
 
+  /// `--dart-define=FORCE_TV=true` makes any build behave like the TV app,
+  /// for testing the TV layout on a computer.
+  static const _forceTv = bool.fromEnvironment('FORCE_TV');
+
   static Future<void> detect() async {
+    if (_forceTv) {
+      isTv = true;
+      return;
+    }
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     try {
       isTv = await _channel.invokeMethod<bool>('isTv') ?? false;
