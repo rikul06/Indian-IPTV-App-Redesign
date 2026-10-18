@@ -123,5 +123,7 @@ void main() {
         ]..sort((a, b) => a.index.compareTo(b.index)));
     expect(catalog.search('hindi').map((c) => c.name), ['Aaj Tak', 'Zee TV']);
     expect(catalog.search('aaj').map((c) => c.name), ['Aaj Tak']);
+    expect(catalog.hdOnly.channels.map((c) => c.name),
+        ['Aaj Tak', 'Zee TV', '9X Jhakaas']);
   });
 }

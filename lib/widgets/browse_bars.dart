@@ -225,17 +225,22 @@ class _GenreTabState extends State<_GenreTab> {
   }
 }
 
-/// The row of language filters ("All languages", Hindi, Tamil...).
+/// The row of filters: an "HD only" switch, then the languages
+/// ("All languages", Hindi, Tamil...).
 class LanguageBar extends StatelessWidget {
   final List<String> languages;
   final String? selected;
   final ValueChanged<String?> onSelected;
+  final bool hdOnly;
+  final ValueChanged<bool> onHdOnlyChanged;
 
   const LanguageBar({
     super.key,
     required this.languages,
     required this.selected,
     required this.onSelected,
+    required this.hdOnly,
+    required this.onHdOnlyChanged,
   });
 
   @override
@@ -247,10 +252,17 @@ class LanguageBar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         clipBehavior: Clip.none,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        itemCount: options.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemCount: options.length + 1,
+        separatorBuilder: (_, index) => SizedBox(width: index == 0 ? 20 : 8),
         itemBuilder: (context, index) {
-          final language = options[index];
+          if (index == 0) {
+            return _LanguagePill(
+              label: 'HD & Full HD',
+              selected: hdOnly,
+              onTap: () => onHdOnlyChanged(!hdOnly),
+            );
+          }
+          final language = options[index - 1];
           return _LanguagePill(
             label: language ?? 'All languages',
             selected: language == selected,

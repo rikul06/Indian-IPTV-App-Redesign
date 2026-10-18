@@ -35,6 +35,10 @@ class _HomeState extends State<Home> {
   /// The selected tab: a [_Special] or a [Genre].
   Object _tab = _Special.home;
   String? _language;
+  bool _hdOnly = false;
+
+  /// The catalog the screen shows: everything, or only HD channels.
+  ChannelCatalog get _view => _hdOnly ? catalog!.hdOnly : catalog!;
 
   @override
   void initState() {
@@ -114,7 +118,7 @@ class _HomeState extends State<Home> {
   }
 
   List<Channel> _channelsFor(List<String> keys) {
-    final all = catalog!.byKey;
+    final all = _view.byKey;
     return [
       for (final key in keys)
         if (all[key] != null &&
@@ -220,7 +224,7 @@ class _HomeState extends State<Home> {
     return ListenableBuilder(
       listenable: library,
       builder: (context, _) {
-        final genres = catalog!.genresWithChannels(language: _language);
+        final genres = _view.genresWithChannels(language: _language);
         final favourites = _channelsFor(library.favourites);
         final tabs = <Object>[
           _Special.home,
@@ -231,13 +235,13 @@ class _HomeState extends State<Home> {
         final items = [for (final t in tabs) _barItem(t, favourites.length)];
         void select(int index) => setState(() => _tab = tabs[index]);
 
-        final languageBar = catalog!.languages.length > 1
-            ? LanguageBar(
-                languages: catalog!.languages,
-                selected: _language,
-                onSelected: (language) => setState(() => _language = language),
-              )
-            : const SizedBox.shrink();
+        final languageBar = LanguageBar(
+          languages: catalog!.languages,
+          selected: _language,
+          onSelected: (language) => setState(() => _language = language),
+          hdOnly: _hdOnly,
+          onHdOnlyChanged: (value) => setState(() => _hdOnly = value),
+        );
         final content = RefreshIndicator(
           onRefresh: () => _loadSource(selectedSource!),
           child: switch (tab) {
@@ -245,7 +249,7 @@ class _HomeState extends State<Home> {
             _Special.favourites =>
               _buildGrid('Favourites', favourites, Icons.star_rounded),
             Genre genre => _buildGrid(genre.label,
-                catalog!.filter(genre: genre, language: _language), genre.icon),
+                _view.filter(genre: genre, language: _language), genre.icon),
             _ => const SizedBox.shrink(),
           },
         );
@@ -306,14 +310,14 @@ class _HomeState extends State<Home> {
           label: genre.label,
           icon: genre.icon,
           color: genre.color,
-          count: catalog!.filter(genre: genre, language: _language).length),
+          count: _view.filter(genre: genre, language: _language).length),
       _ => GenreBarItem(label: '', icon: Icons.circle, color: primary),
     };
   }
 
   Widget _buildHomeRails(List<Genre> genres, List<Channel> favourites) {
     final recent = _channelsFor(library.recent);
-    final popular = catalog!.popular(language: _language);
+    final popular = _view.popular(language: _language);
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
@@ -350,7 +354,7 @@ class _HomeState extends State<Home> {
             title: genre.label,
             icon: genre.icon,
             color: genre.color,
-            channels: catalog!.filter(genre: genre, language: _language),
+            channels: _view.filter(genre: genre, language: _language),
             tileBuilder: _tile,
             wide: _wide,
             onSeeAll: () => setState(() => _tab = genre),

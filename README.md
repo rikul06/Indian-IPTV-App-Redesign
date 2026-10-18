@@ -22,6 +22,7 @@ Android TV / Google TV remotes and also works on phones.
   [iptv-org channel database](https://github.com/iptv-org/database), with
   name-based guesses for channels it doesn't know.
 - **Languages**: filter everything by Hindi, Tamil, Telugu, English, Bengali, etc.
+- **HD & Full HD** switch: show only channels with a 720p or better stream.
 - **Most popular first**: each genre starts with its most-watched channels
   (based on BARC India ratings), then the rest A to Z. Home opens with a
   **Top channels** row that mixes the leaders of each genre.
@@ -48,6 +49,8 @@ Android TV / Google TV remotes and also works on phones.
 - **Full screen** on phones: tap the button and the video fills the screen
   in landscape with the system bars hidden. Back or the button returns.
 - Favourite star, quality picker and a LIVE badge on the video.
+- **Open in VLC / other player**: hands the stream to any video app you
+  have installed (VLC, MX Player...), picked from Android's "Open with" list.
 
 ## Screenshots
 

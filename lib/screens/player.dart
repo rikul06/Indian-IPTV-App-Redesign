@@ -359,6 +359,7 @@ class _PlayerState extends State<Player> {
                               ),
                             ),
                           ),
+                          _externalButton(),
                           _favouriteButton(),
                           if (streams.length > 1) _qualityButton(),
                         ],
@@ -398,6 +399,25 @@ class _PlayerState extends State<Player> {
         ),
       ),
     );
+  }
+
+  /// Hands the stream to VLC or any other installed video app.
+  Widget _externalButton() => _ControlButton(
+        icon: Icons.open_in_new_rounded,
+        tooltip: 'Open in VLC / other player',
+        onPressed: _openExternal,
+      );
+
+  Future<void> _openExternal() async {
+    videoPlayerController?.pause();
+    final opened =
+        await Device.openExternal(widget.channel.streams[_streamIndex].url);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:
+            Text('No video player found. Install VLC from the Play Store.'),
+      ));
+    }
   }
 
   Widget _favouriteButton() => ListenableBuilder(
@@ -455,6 +475,7 @@ class _PlayerState extends State<Player> {
           Row(
             children: [
               _favouriteButton(),
+              _externalButton(),
               if (streams.length > 1) _qualityButton(),
               const Spacer(),
               FilledButton.tonalIcon(

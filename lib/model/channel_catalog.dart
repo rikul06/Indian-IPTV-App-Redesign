@@ -16,6 +16,10 @@ class ChannelCatalog {
 
   ChannelCatalog(this.channels);
 
+  /// The same catalog with only HD and Full HD channels.
+  late final ChannelCatalog hdOnly =
+      ChannelCatalog(channels.where((c) => c.isHd).toList());
+
   /// Channels of [genre] (all genres when null) in [language] (all
   /// languages when null). Within a genre, the genre's most watched
   /// channels come first, then the rest A to Z.

@@ -48,6 +48,11 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Video apps (VLC, MX Player...) for "Open in other player". -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="video/*"/>
+        </intent>
     </queries>
     <uses-permission android:name="android.permission.INTERNET"/>
 </manifest>
