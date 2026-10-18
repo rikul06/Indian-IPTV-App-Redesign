@@ -1,0 +1,31 @@
+name: Refresh channel data
+
+# Rebuilds assets/data/channel_meta.json (genres, languages and logos from the
+# iptv-org database) every Monday, so new channels get sorted into genres.
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 tool/build_channel_meta.py
+      - name: Commit if changed
+        run: |
+          if git diff --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Refresh channel metadata from iptv-org"
+          git push

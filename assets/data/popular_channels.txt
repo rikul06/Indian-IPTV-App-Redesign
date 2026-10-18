@@ -1,0 +1,255 @@
+# Most-watched Indian TV channels, most popular first within each section.
+#
+# Built from BARC India weekly viewership rankings (All India 2+, 2025-2026
+# weeks) and genre leaders reported by trade press (exchange4media,
+# medianews4u, indiantelevision.com). Channels the free playlist does not
+# carry are left in, so the list keeps working as the playlist changes.
+#
+# Format: "## Section" starts a section; every other line is a channel name.
+# Names are matched ignoring case, spaces, punctuation and a trailing HD/SD,
+# so "Zee TV" also matches "Zee TV HD". Channels not listed come after the
+# listed ones, A to Z. Edit freely: no app code needs to change.
+
+## Entertainment
+Star Utsav
+Star Maa
+Sun TV
+Sony SAB
+Zee Telugu
+Zee TV
+Dangal TV
+StarPlus
+Star Plus
+Sony Pal
+Colors
+Sony Entertainment Television
+Star Jalsha
+Zee Bangla
+Star Vijay
+Zee Tamil
+Zee Kannada
+Colors Kannada
+Asianet
+Zee Marathi
+Star Pravah
+ETV Telugu
+Sun Gemini
+Gemini TV
+Shemaroo TV
+Shemaroo Umang
+Dangal 2
+Sun Surya
+Surya TV
+Colors Marathi
+Mazhavil Manorama
+Colors Bangla
+Sony Aath
+DD National
+Star Kiran
+Colors Tamil
+Colors Gujarati
+Zee Bangla Sonar
+Polimer TV
+Fakt Marathi
+Sony Marathi
+Raj TV
+PTC Punjabi
+Epic
+Colors Rishtey
+Colors Infinity
+Zee Anmol
+Zee Classic
+Zee Comedy Nation
+
+## Movies
+Goldmines
+Sony Max
+Star Gold
+Zee Cinema
+Colors Cineplex
+And Pictures
+&pictures
+Sony Wah
+Zee Action
+Star Maa Movies
+Zee Cinemalu
+ETV Cinema
+Jalsha Movies
+B4U Movies
+Star Gold 2
+Sony Max 2
+Goldmines Movies
+Goldmines Bollywood
+Goldmines 2
+Goldmines Action
+Colors Cineplex Bollywood
+Zee Talkies
+Asianet Movies
+Zee Bollywood
+Manoranjan Movies
+B4U Kadak
+Bhojpuri Cinema
+Movies Now
+Star Movies
+Sony Pix
+&TV
+&xplor
+Zee Cine Classic
+Colors Bangla Cinema
+Sony Max 1
+
+## News
+News18 India
+Aaj Tak
+TV9 Bharatvarsh
+Republic Bharat
+Zee News
+India TV
+ABP News
+Times Now Navbharat
+News24
+News 24
+NDTV India
+News Nation
+DD News
+Good News Today
+Zee Bharat
+CNN News18
+NDTV 24x7
+Times Now
+Republic TV
+India Today
+WION
+Mirror Now
+NewsX
+CNBC TV18
+ET Now
+Zee Business
+CNBC Awaaz
+NDTV Profit
+ABP Majha
+TV9 Marathi
+ABP Ananda
+Republic Bangla
+Zee 24 Ghanta
+TV9 Bangla
+TV9 Telugu
+NTV Telugu
+Sakshi TV
+V6 News
+Thanthi TV
+Polimer News
+Puthiya Thalaimurai
+News7 Tamil
+News 7 Tamil
+Asianet News
+Manorama News
+24 News
+Mathrubhumi News
+TV9 Kannada
+Public TV
+Suvarna News
+Asianet Suvarna News
+TV9 Gujarati
+ABP Asmita
+Sandesh News
+ABP Ganga
+Zee 24 Taas
+News18 Bangla
+News18 Uttar Pradesh Uttarakhand
+News18 Bihar Jharkhand
+News18 Madhya Pradesh/Chhattisgarh
+News18 Rajasthan
+India TV Speed News
+Sansad TV 1
+Sansad TV 2
+
+## Sports
+Star Sports 1 Hindi
+Star Sports 1
+Star Sports 2 Hindi
+Sony Sports Ten 1
+DD Sports
+Sony Sports Ten 3 Hindi
+Star Sports Select 1
+Star Sports 2
+Sony Sports Ten 5
+Sony Sports Ten 2
+Star Sports 3
+Star Sports Select 2
+Star Sports 2 Telugu
+Sony Sports Ten 4 Kannada
+Eurosport
+Ten Cricket
+
+## Kids
+Nickelodeon
+Nick
+Sony Yay!
+Pogo
+Cartoon Network
+Disney Channel
+Hungama TV
+Discovery Kids
+Super Hungama
+Nick Jr.
+Sonic
+Disney Junior
+ETV Bal Bharat
+WOW Kidz
+
+## Music
+9XM
+Zing!
+B4U Music
+MTV
+Zoom
+9X Jalwa
+9X Tashan
+9X Jhakaas
+Mastiii
+Sangeet Bhojpuri
+PTC Chakde
+Balle Balle
+YRF Music
+Dhamaal
+Music India
+Isai Aruvi
+Sangeet Bangla
+Sangeet Marathi
+ETV Music
+
+## Devotional
+Aastha
+Sanskar TV
+Aastha Bhajan
+SVBC Sri Venkateswara Bhakti Channel
+SVBC
+Bhakthi TV
+Sadhna TV
+Satsang TV
+Ishwar Bhakti TV
+Paras Gold
+Shubhsandesh TV
+PTC Simran
+Bhakti Sagar
+Aastha Tamil
+Aastha Telugu
+Aastha Kannada
+Aastha Gujarati
+
+## Infotainment
+Discovery Channel
+National Geographic
+Animal Planet
+History TV18
+Sony BBC Earth
+TLC
+Discovery Science
+Investigation Discovery
+National Geographic Wild
+Travelxp
+Food Food
+Discovery Turbo
+DD Kisan
+Gyandarshan
