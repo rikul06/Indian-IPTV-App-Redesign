@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/channel.dart';
 import '../model/channel_catalog.dart';
@@ -12,6 +13,11 @@ class ChannelsProvider {
   static const bundledStreamsCatalog = 'data/streams.csv';
   static const channelMetaAsset = 'assets/data/channel_meta.json';
   static const popularityAsset = 'assets/data/popular_channels.txt';
+
+  /// Where the newest data files live: this repo, refreshed weekly by
+  /// .github/workflows/refresh-channel-data.yml.
+  static const repoDataUrl =
+      'https://raw.githubusercontent.com/rikul06/Indian-IPTV-App-Redesign/main/';
 
   Map<String, dynamic>? _channelMeta;
   Map<String, Map<Genre, int>>? _popularity;
@@ -55,8 +61,11 @@ class ChannelsProvider {
   Future<Map<String, Map<Genre, int>>> _loadPopularity() async {
     if (_popularity != null) return _popularity!;
     try {
-      _popularity =
-          parsePopularity(await rootBundle.loadString(popularityAsset));
+      _popularity = await latestData(popularityAsset, (text) {
+        final ranks = parsePopularity(text);
+        if (ranks.isEmpty) throw const FormatException('No channels');
+        return ranks;
+      });
     } catch (_) {
       _popularity = {};
     }
@@ -87,11 +96,52 @@ class ChannelsProvider {
     return ranks;
   }
 
+  /// The newest copy of a data file, so genres, logos and popularity update
+  /// without a new APK: downloaded from this repo, else the copy saved last
+  /// time, else the one built into the app. [parse] rejects a bad copy by
+  /// throwing.
+  static Future<T> latestData<T>(String asset, T Function(String) parse,
+      {Future<String> Function()? download}) async {
+    SharedPreferences? prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (_) {
+      // No saved copies.
+    }
+    try {
+      final text = await (download ?? () => _download(asset))();
+      final data = parse(text);
+      await prefs?.setString(asset, text);
+      return data;
+    } catch (_) {
+      // Offline or GitHub unreachable.
+    }
+    final saved = prefs?.getString(asset);
+    if (saved != null) {
+      try {
+        return parse(saved);
+      } catch (_) {
+        // Fall back to the built-in copy.
+      }
+    }
+    return parse(await rootBundle.loadString(asset));
+  }
+
+  static Future<String> _download(String asset) async {
+    final response = await http
+        .get(Uri.parse('$repoDataUrl$asset'))
+        .timeout(const Duration(seconds: 5));
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    return utf8.decode(response.bodyBytes);
+  }
+
   Future<Map<String, dynamic>> _loadChannelMeta() async {
     if (_channelMeta != null) return _channelMeta!;
     try {
-      _channelMeta = jsonDecode(await rootBundle.loadString(channelMetaAsset))
-          as Map<String, dynamic>;
+      _channelMeta = await latestData(
+          channelMetaAsset, (text) => jsonDecode(text) as Map<String, dynamic>);
     } catch (_) {
       _channelMeta = {};
     }

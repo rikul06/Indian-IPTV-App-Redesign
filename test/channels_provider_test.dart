@@ -152,4 +152,40 @@ https://example.com/beta.m3u8
         ['Beta Music', 'Alpha Music']);
     expect(music.first.notWorking, isTrue);
   });
+
+  group('data files', () {
+    const asset = ChannelsProvider.popularityAsset;
+    String same(String text) => text;
+    Future<String> offline() async => throw Exception('offline');
+
+    setUp(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('uses the downloaded copy and saves it', () async {
+      expect(
+          await ChannelsProvider.latestData(asset, same,
+              download: () async => 'new'),
+          'new');
+      expect(await ChannelsProvider.latestData(asset, same, download: offline),
+          'new');
+    });
+
+    test('ignores a bad download', () async {
+      SharedPreferences.setMockInitialValues({asset: 'saved'});
+      String rejectBad(String text) =>
+          text == 'bad' ? throw const FormatException() : text;
+      expect(
+          await ChannelsProvider.latestData(asset, rejectBad,
+              download: () async => 'bad'),
+          'saved');
+    });
+
+    test('falls back to the copy built into the app', () async {
+      final text =
+          await ChannelsProvider.latestData(asset, same, download: offline);
+      expect(text, contains('## Entertainment'));
+    });
+  });
 }

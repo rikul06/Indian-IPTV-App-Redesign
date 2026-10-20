@@ -122,11 +122,19 @@ flutter build apk --release
 
 ## Channel data
 
+Everything updates without a new APK:
+- **Streams**: each time the app opens (or you switch playlist, or pull down
+  to refresh) it downloads the latest playlist straight from iptv-org.
+- **Genres, logos and popularity order**: at start-up the app downloads
+  `channel_meta.json` and `popular_channels.txt` from this repo's `main`
+  branch and keeps a copy. Offline, it uses that copy, or the one built
+  into the APK.
+
 | File | What it is | How to update |
 |---|---|---|
 | `data/streams.csv` | Playlists to choose from: Indian TV, and iptv-org's worldwide Movies, Shows & series and Sports lists (all free, legal streams). | Edit the CSV, then run the meta script below. |
 | `assets/data/channel_meta.json` | Genre, languages and logo per iptv-org channel id. | `python3 tool/build_channel_meta.py`. A weekly workflow does this automatically. |
-| `assets/data/popular_channels.txt` | Most-watched channels per genre, in order. | Edit the text file; names are matched ignoring case, spaces and HD/SD. |
+| `assets/data/popular_channels.txt` | Most-watched channels per genre, in order. | Edit the text file; names are matched ignoring case, spaces and HD/SD. Apps pick it up at next start. |
 
 ## Credits
 
