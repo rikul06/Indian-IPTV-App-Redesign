@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ip_tv/model/channel_catalog.dart';
 import 'package:ip_tv/model/genre.dart';
 import 'package:ip_tv/provider/channels_provider.dart';
+import 'package:ip_tv/services/stream_health.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const playlist = '''#EXTM3U
 #EXTINF:-1 tvg-id="9XJhakaas.in@SD",9X Jhakaas (576p)
@@ -130,5 +132,24 @@ void main() {
     expect(catalog.search('aaj').map((c) => c.name), ['Aaj Tak']);
     expect(catalog.hdOnly.channels.map((c) => c.name),
         ['Aaj Tak', 'Zee TV', '9X Jhakaas']);
+  });
+
+  test('channels whose sources all failed go to the end of a genre', () async {
+    SharedPreferences.setMockInitialValues({});
+    await StreamHealth.load();
+    final music = ChannelsProvider.parseM3U('''#EXTM3U
+#EXTINF:-1 group-title="Music",Alpha Music
+https://example.com/alpha.m3u8
+#EXTINF:-1 group-title="Music",Beta Music
+https://example.com/beta.m3u8
+''', const {});
+    final catalog = ChannelCatalog(music);
+    expect(catalog.filter(genre: Genre.music).map((c) => c.name),
+        ['Alpha Music', 'Beta Music']);
+
+    StreamHealth.markBad('https://example.com/alpha.m3u8');
+    expect(catalog.filter(genre: Genre.music).map((c) => c.name),
+        ['Beta Music', 'Alpha Music']);
+    expect(music.first.notWorking, isTrue);
   });
 }

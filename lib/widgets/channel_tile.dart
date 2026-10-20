@@ -62,10 +62,13 @@ class _ChannelTileState extends State<ChannelTile> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final channel = widget.channel;
-    final subtitle = [
-      if (channel.languages.isNotEmpty) channel.languages.first,
-      if (channel.isHd) 'HD',
-    ].join(' · ');
+    final notWorking = channel.notWorking;
+    final subtitle = notWorking
+        ? 'Not working'
+        : [
+            if (channel.languages.isNotEmpty) channel.languages.first,
+            if (channel.isHd) 'HD',
+          ].join(' · ');
 
     return Focus(
       canRequestFocus: false,
@@ -106,7 +109,11 @@ class _ChannelTileState extends State<ChannelTile> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: ChannelLogo(channel: channel),
+                          // Dimmed when it did not work last time.
+                          child: Opacity(
+                            opacity: notWorking && !_focused ? 0.35 : 1,
+                            child: ChannelLogo(channel: channel),
+                          ),
                         ),
                         if (widget.isFavourite)
                           const Positioned(
@@ -138,7 +145,9 @@ class _ChannelTileState extends State<ChannelTile> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: notWorking
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
               ],

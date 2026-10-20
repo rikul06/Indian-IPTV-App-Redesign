@@ -22,7 +22,8 @@ class ChannelCatalog {
 
   /// Channels of [genre] (all genres when null) in [language] (all
   /// languages when null). Within a genre, the genre's most watched
-  /// channels come first, then the rest A to Z.
+  /// channels come first, then the rest A to Z, and channels that did not
+  /// work last time at the end.
   List<Channel> filter({Genre? genre, String? language}) {
     final result = channels.where((c) {
       if (genre != null) {
@@ -36,6 +37,7 @@ class ChannelCatalog {
     if (genre != null) {
       const unranked = 1 << 30;
       result.sort((a, b) {
+        if (a.notWorking != b.notWorking) return a.notWorking ? 1 : -1;
         final byRank =
             (a.ranks[genre] ?? unranked).compareTo(b.ranks[genre] ?? unranked);
         if (byRank != 0) return byRank;

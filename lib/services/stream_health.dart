@@ -1,14 +1,12 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Remembers which stream URLs failed recently and which source last worked
+/// Remembers which stream URLs did not work and which source last worked
 /// for each channel, so a channel opens on a working source instead of
-/// waiting on a dead one. Loaded once at start-up.
+/// waiting on a dead one. A failed URL stays marked until it plays again.
+/// Loaded once at start-up.
 class StreamHealth {
   static const _badKey = 'bad_streams';
   static const _goodKey = 'good_streams';
-
-  /// How long a failed stream is skipped. Free streams often come back.
-  static const _badFor = Duration(hours: 12);
 
   /// Failed stream URL -> when it failed (milliseconds since epoch).
   static final Map<String, int> _bad = {};
@@ -17,6 +15,8 @@ class StreamHealth {
   static final Map<String, String> _good = {};
 
   static Future<void> load() async {
+    _bad.clear();
+    _good.clear();
     try {
       final prefs = await SharedPreferences.getInstance();
       for (final entry in prefs.getStringList(_badKey) ?? const <String>[]) {
@@ -35,14 +35,13 @@ class StreamHealth {
     }
   }
 
-  static bool isBad(String url) {
-    final failedAt = _bad[url];
-    return failedAt != null &&
-        DateTime.now().millisecondsSinceEpoch - failedAt <
-            _badFor.inMilliseconds;
-  }
+  /// Whether [url] did not work last time (and has not worked since).
+  static bool isBad(String url) => _bad.containsKey(url);
 
   static String? lastGood(String channelKey) => _good[channelKey];
+
+  /// Whether none of [urls] (a channel's sources) worked last time.
+  static bool allBad(Iterable<String> urls) => urls.every(isBad);
 
   static void markBad(String url) {
     _bad[url] = DateTime.now().millisecondsSinceEpoch;
@@ -55,8 +54,27 @@ class StreamHealth {
     _save();
   }
 
+  /// The source to open a channel on: the one that worked last time, else
+  /// the first one not marked as failed, else the first.
+  static int firstSource(List<String> urls, {String? lastGood}) {
+    final good = urls.indexOf(lastGood ?? '');
+    if (good >= 0 && !isBad(urls[good])) return good;
+    final unmarked = urls.indexWhere((url) => !isBad(url));
+    return unmarked >= 0 ? unmarked : 0;
+  }
+
+  /// The source to try after [current] fails: the next one (wrapping around)
+  /// not yet tried in [failedNow], preferring sources not marked as failed
+  /// last time. Null when every source has been tried.
+  static int? nextSource(List<String> urls, int current, Set<int> failedNow) {
+    final order = [
+      for (var step = 1; step < urls.length; step++)
+        (current + step) % urls.length,
+    ].where((i) => !failedNow.contains(i) && i != current);
+    return order.where((i) => !isBad(urls[i])).firstOrNull ?? order.firstOrNull;
+  }
+
   static Future<void> _save() async {
-    _bad.removeWhere((url, _) => !isBad(url));
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(

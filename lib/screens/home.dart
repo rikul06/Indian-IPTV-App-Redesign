@@ -25,6 +25,7 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   static const _playlistKey = 'playlist';
+  static const _languageKey = 'language';
 
   final ChannelsProvider channelsProvider = ChannelsProvider();
   final LibraryStore library = LibraryStore();
@@ -37,6 +38,13 @@ class _HomeState extends State<Home> {
 
   /// The selected tab: a [_Special] or a [Genre].
   Object _tab = _Special.home;
+
+  /// The language the user wants: Hindi until they pick something else;
+  /// null is "All languages". Remembered between launches.
+  String? _preferredLanguage = 'Hindi';
+
+  /// The language filter shown: the preferred one, or "All languages" when
+  /// the playlist has no channels in it.
   String? _language;
   bool _hdOnly = false;
 
@@ -67,12 +75,18 @@ class _HomeState extends State<Home> {
       });
       return;
     }
-    // Open the playlist used last time.
+    // Open the playlist and language used last time.
     String? last;
     try {
-      last = (await SharedPreferences.getInstance()).getString(_playlistKey);
+      final prefs = await SharedPreferences.getInstance();
+      last = prefs.getString(_playlistKey);
+      final language = prefs.getString(_languageKey);
+      // Saved as '' for "All languages".
+      if (language != null) {
+        _preferredLanguage = language.isEmpty ? null : language;
+      }
     } catch (_) {
-      // Start with the first playlist.
+      // Start with the first playlist, in Hindi.
     }
     await _loadSource(
         sources.firstWhere((s) => s.name == last, orElse: () => sources.first));
@@ -120,9 +134,9 @@ class _HomeState extends State<Home> {
         catalog = data;
         _isLoading = false;
         _tab = _Special.home;
-        if (_language != null && !data.languages.contains(_language)) {
-          _language = null;
-        }
+        _language = data.languages.contains(_preferredLanguage)
+            ? _preferredLanguage
+            : null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -134,14 +148,29 @@ class _HomeState extends State<Home> {
     }
   }
 
-  void _openChannel(Channel channel) {
+  Future<void> _selectLanguage(String? language) async {
+    setState(() => _language = _preferredLanguage = language);
+    try {
+      await (await SharedPreferences.getInstance())
+          .setString(_languageKey, language ?? '');
+    } catch (_) {
+      // Not remembered; the filter still applies.
+    }
+  }
+
+  /// Opens [channel]; [list] is the row or grid it was picked from, which
+  /// the player flips through with channel up/down.
+  Future<void> _openChannel(Channel channel, List<Channel> list) async {
     library.markWatched(channel.key);
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => Player(channel: channel, library: library),
+        builder: (context) =>
+            Player(channel: channel, library: library, channels: list),
       ),
     );
+    // Redraw so channels that just failed show as "Not working".
+    if (mounted) setState(() {});
   }
 
   Future<void> _toggleFavourite(Channel channel) async {
@@ -273,7 +302,7 @@ class _HomeState extends State<Home> {
         final languageBar = LanguageBar(
           languages: catalog!.languages,
           selected: _language,
-          onSelected: (language) => setState(() => _language = language),
+          onSelected: _selectLanguage,
           hdOnly: _hdOnly,
           onHdOnlyChanged: (value) => setState(() => _hdOnly = value),
         );
@@ -299,6 +328,9 @@ class _HomeState extends State<Home> {
                 items: items,
                 selected: tabs.indexOf(tab),
                 onSelected: select,
+                // The first "Continue watching" tile takes focus instead.
+                autofocus: tab != _Special.home ||
+                    _channelsFor(library.recent).isEmpty,
               ),
               Expanded(
                 // Rows that scroll left stop at the menu's edge instead of
@@ -375,7 +407,9 @@ class _HomeState extends State<Home> {
             icon: Icons.history_rounded,
             color: Theme.of(context).colorScheme.primary,
             channels: recent,
-            tileBuilder: _tile,
+            // On TV the remote starts here: one OK resumes the last channel.
+            tileBuilder: (channel, list) => _tile(channel, list,
+                autofocus: Device.isTv && channel == recent.first),
             wide: _wide,
           ),
         if (favourites.isNotEmpty)
@@ -444,17 +478,19 @@ class _HomeState extends State<Home> {
               mainAxisSpacing: 6,
             ),
             itemCount: channels.length,
-            itemBuilder: (context, index) => _tile(channels[index]),
+            itemBuilder: (context, index) => _tile(channels[index], channels),
           ),
         ),
       ],
     );
   }
 
-  Widget _tile(Channel channel) => ChannelTile(
+  Widget _tile(Channel channel, List<Channel> list, {bool autofocus = false}) =>
+      ChannelTile(
         channel: channel,
+        autofocus: autofocus,
         isFavourite: library.isFavourite(channel.key),
-        onTap: () => _openChannel(channel),
+        onTap: () => _openChannel(channel, list),
         onLongPress: () => _toggleFavourite(channel),
       );
 }
@@ -467,7 +503,7 @@ class _Rail extends StatelessWidget {
   final IconData icon;
   final Color color;
   final List<Channel> channels;
-  final Widget Function(Channel) tileBuilder;
+  final Widget Function(Channel channel, List<Channel> list) tileBuilder;
   final bool wide;
   final VoidCallback? onSeeAll;
 
@@ -527,7 +563,8 @@ class _Rail extends StatelessWidget {
               itemCount: shown.length,
               separatorBuilder: (_, __) => const SizedBox(width: 4),
               itemBuilder: (context, index) => SizedBox(
-                  width: wide ? 150 : 124, child: tileBuilder(shown[index])),
+                  width: wide ? 150 : 124,
+                  child: tileBuilder(shown[index], channels)),
             ),
           ),
         ],

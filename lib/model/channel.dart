@@ -1,3 +1,4 @@
+import '../services/stream_health.dart';
 import 'genre.dart';
 
 /// One playable URL of a channel. Playlists often list the same channel
@@ -81,6 +82,9 @@ class Channel {
   String get streamUrl => streams.first.url;
 
   bool get isHd => streams.any((s) => s.lines >= 720);
+
+  /// None of the sources worked last time the channel was opened.
+  bool get notWorking => StreamHealth.allBad(streams.map((s) => s.url));
 
   String get initials {
     final words = name

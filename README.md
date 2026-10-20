@@ -22,6 +22,7 @@ Android TV / Google TV remotes and also works on phones.
   [iptv-org channel database](https://github.com/iptv-org/database), with
   name-based guesses for channels it doesn't know.
 - **Languages**: filter everything by Hindi, Tamil, Telugu, English, Bengali, etc.
+  Hindi is selected the first time; after that the app remembers your choice.
 - **HD & Full HD** switch: show only channels with a 720p or better stream.
 - **Most popular first**: each genre starts with its most-watched channels
   (based on BARC India ratings), then the rest A to Z. Home opens with a
@@ -33,6 +34,9 @@ Android TV / Google TV remotes and also works on phones.
   the last one. Use the English and HD & Full HD filters to find the best
   English movie and show channels.
 - **Search** by channel name, language or genre.
+- **Not working** mark: a channel whose every source failed last time is
+  dimmed, labelled "Not working" and moved to the end of its row. It clears
+  as soon as one of its sources plays.
 - **Logos** for ~99% of channels, and initials on a genre colour when a logo is missing.
 - **No duplicates**: "Zee TV", "Zee TV HD" and the 576p/1080p copies of a
   channel become one tile. The player tries the best working stream and
@@ -45,21 +49,31 @@ Android TV / Google TV remotes and also works on phones.
 - Full D-pad support: every tile, tab and filter has a clear focus outline.
   **OK** opens a channel, **hold OK** adds it to Favourites, **Back** returns.
 - Full-screen player on TV.
+- The remote starts on the first **Continue watching** tile, so one OK
+  press resumes your last channel.
 
 **Player**
-- One row of buttons, easy with a TV remote: **Play/Pause**, **Source**
-  (a list of the channel's streams to pick from; ones that failed are marked), **Size** (Full / Large / Medium / Small,
-  remembered; smaller looks sharper for low-resolution channels on a big
-  TV), **Open in VLC** and **Favourite**. No pop-up menus.
+- One row of buttons, easy with a TV remote: **Play/Pause**, **Channels**
+  (jump to another channel of the row you came from), **Source** (a list of
+  the channel's streams to pick from; ones that failed are marked), **Size**
+  (Full / Zoom / Large / Medium / Small, remembered; Zoom fills the screen by
+  cropping black bars, smaller looks sharper for low-resolution channels on a
+  big TV), **Open in VLC** and **Favourite**. No pop-up menus.
+- **Channel up/down**: **CH+ / CH−**, or **Left / Right** while the controls
+  are hidden, switch to the next or previous channel of that row.
 - Remote: **Down** (or OK) shows the controls, **Up** hides them, **OK**
   presses a button, **⏯** pauses, **Back** hides the controls and then
   leaves. Controls fade after 5 seconds.
 - If the picture freezes for 10 seconds or the stream reports an error,
   the player reconnects by itself (twice), then moves on to the channel's
-  other sources (all of them, wrapping around) before giving up. A source that does not answer within 15 seconds is skipped.
-- Remembers which source last worked for each channel and starts there;
-  links that failed in the last 12 hours are skipped. While a source
-  connects, **Next source** and **Choose source** let you skip waiting.
+  other sources (all of them, wrapping around) before giving up. A source
+  that does not answer within 10 seconds is skipped.
+- Remembers which source last worked for each channel and starts there.
+  Sources that did not work last time are never dropped, only tried last:
+  if Aaj Tak's source 1 failed, it opens on source 2 next time, and if 2
+  and 3 fail too it goes back to 1. The source list says "Did not work last
+  time · you can still try it". While a source connects, **Next source**
+  and **Choose source** let you skip waiting.
 - Video is drawn by Android's own video surface, which is much lighter on
   TV hardware.
 - Streams that need a referrer or user agent (from the playlist's

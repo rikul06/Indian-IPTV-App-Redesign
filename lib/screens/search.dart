@@ -9,7 +9,7 @@ import '../widgets/channel_tile.dart';
 class SearchScreen extends StatefulWidget {
   final ChannelCatalog catalog;
   final LibraryStore library;
-  final ValueChanged<Channel> onOpen;
+  final void Function(Channel channel, List<Channel> list) onOpen;
   final ValueChanged<Channel> onToggleFavourite;
 
   const SearchScreen({
@@ -86,7 +86,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       return ChannelTile(
                         channel: channel,
                         isFavourite: widget.library.isFavourite(channel.key),
-                        onTap: () => widget.onOpen(channel),
+                        onTap: () => widget.onOpen(channel, results),
                         onLongPress: () => widget.onToggleFavourite(channel),
                       );
                     },

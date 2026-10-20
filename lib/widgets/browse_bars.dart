@@ -59,11 +59,16 @@ class GenreSideNav extends StatefulWidget {
   final int selected;
   final ValueChanged<int> onSelected;
 
+  /// Whether the selected genre takes the remote's focus when the screen
+  /// opens (off when something else on the screen should have it).
+  final bool autofocus;
+
   const GenreSideNav({
     super.key,
     required this.items,
     required this.selected,
     required this.onSelected,
+    this.autofocus = true,
   });
 
   @override
@@ -112,7 +117,7 @@ class _GenreSideNavState extends State<GenreSideNav> {
             selected: index == widget.selected,
             vertical: true,
             focusNode: _node(index),
-            autofocus: index == widget.selected,
+            autofocus: widget.autofocus && index == widget.selected,
             onTap: () => widget.onSelected(index),
           ),
         ),

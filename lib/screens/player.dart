@@ -20,19 +20,30 @@ final _playPauseKeys = {
   LogicalKeyboardKey.space,
 };
 
-/// Keys that bring the controls back while they are hidden. Up hides them.
+/// Keys that bring the controls back while they are hidden. Up hides them;
+/// Left and Right change channel while they are hidden.
 final _wakeKeys = {
   LogicalKeyboardKey.select,
   LogicalKeyboardKey.enter,
   LogicalKeyboardKey.arrowDown,
-  LogicalKeyboardKey.arrowLeft,
-  LogicalKeyboardKey.arrowRight,
+};
+
+/// Remote and keyboard keys for the next and previous channel.
+final _channelUpKeys = {
+  LogicalKeyboardKey.channelUp,
+  LogicalKeyboardKey.pageUp,
+};
+final _channelDownKeys = {
+  LogicalKeyboardKey.channelDown,
+  LogicalKeyboardKey.pageDown,
 };
 
 /// How much of the screen the picture fills. Smaller looks sharper for
 /// low-resolution channels on a big TV.
 enum _PictureSize {
   full('Full', 1),
+  // Fills the screen, cropping the edges of 4:3 or letterboxed pictures.
+  zoom('Zoom', 1),
   large('Large', 0.85),
   medium('Medium', 0.7),
   small('Small', 0.55);
@@ -48,7 +59,16 @@ class Player extends StatefulWidget {
   final Channel channel;
   final LibraryStore library;
 
-  const Player({super.key, required this.channel, required this.library});
+  /// The row or grid the channel was opened from; channel up/down moves
+  /// through it.
+  final List<Channel> channels;
+
+  const Player({
+    super.key,
+    required this.channel,
+    required this.library,
+    this.channels = const [],
+  });
 
   @override
   State<Player> createState() => _PlayerState();
@@ -85,9 +105,9 @@ class _PlayerState extends State<Player> {
   final FocusNode _retryFocus = FocusNode(debugLabel: 'try again');
   final FocusNode _nextSourceFocus = FocusNode(debugLabel: 'next source');
 
-  /// Sources that did not play, so the automatic fallback skips them and
-  /// the source list can mark them.
-  final Set<int> _broken = {};
+  /// Sources that failed while watching this time; the automatic fallback
+  /// does not try them again.
+  final Set<int> _failedNow = {};
 
   /// Keeps the video widget alive when it moves between the normal and
   /// full-screen layouts.
@@ -119,26 +139,11 @@ class _PlayerState extends State<Player> {
     _loadSize();
     _watchdog =
         Timer.periodic(const Duration(seconds: 2), (_) => _checkStall());
-    _play(_firstSource());
+    _play(StreamHealth.firstSource(_urls,
+        lastGood: StreamHealth.lastGood(widget.channel.key)));
   }
 
-  /// The source that worked last time, otherwise the first one that has
-  /// not failed recently. Recently failed ones are skipped by the fallback.
-  int _firstSource() {
-    final streams = widget.channel.streams;
-    for (var i = 0; i < streams.length; i++) {
-      if (StreamHealth.isBad(streams[i].url)) _broken.add(i);
-    }
-    // All failed recently: give every one another chance.
-    if (_broken.length == streams.length) _broken.clear();
-    final lastGood = StreamHealth.lastGood(widget.channel.key);
-    final good = streams.indexWhere((s) => s.url == lastGood);
-    if (good >= 0 && !_broken.contains(good)) return good;
-    for (var i = 0; i < streams.length; i++) {
-      if (!_broken.contains(i)) return i;
-    }
-    return 0;
-  }
+  List<String> get _urls => [for (final s in widget.channel.streams) s.url];
 
   Future<void> _loadSize() async {
     try {
@@ -195,18 +200,18 @@ class _PlayerState extends State<Player> {
     if (!mounted || generation != _generation) return;
 
     await controller.play();
-    _broken.remove(index);
+    _failedNow.remove(index);
     StreamHealth.markGood(widget.channel.key, stream.url);
     setState(() => _isLoading = false);
     if (!reconnect) _showControls(focusPlayPause: Device.isTv);
   }
 
-  /// This source is down: try the next working one (wrapping around the
-  /// list), and give up only when every source has failed.
+  /// This source is down: try the next one, sources that failed last time
+  /// last, and give up only when every source has failed now.
   void _playNextOrFail(int index) {
-    _broken.add(index);
+    _failedNow.add(index);
     StreamHealth.markBad(widget.channel.streams[index].url);
-    final next = _nextSource(index);
+    final next = StreamHealth.nextSource(_urls, index, _failedNow);
     if (next != null) {
       _play(next);
       return;
@@ -220,26 +225,18 @@ class _PlayerState extends State<Player> {
         .addPostFrameCallback((_) => _retryFocus.requestFocus());
   }
 
-  /// The next source after [index] that has not failed, wrapping around.
-  int? _nextSource(int index) {
-    final count = widget.channel.streams.length;
-    for (var step = 1; step < count; step++) {
-      final next = (index + step) % count;
-      if (!_broken.contains(next)) return next;
-    }
-    return null;
-  }
-
   /// "Next source" while connecting: stop waiting on this one.
   void _skipSource() {
     final count = widget.channel.streams.length;
-    _play(_nextSource(_streamIndex) ?? (_streamIndex + 1) % count);
+    _play(StreamHealth.nextSource(_urls, _streamIndex, _failedNow) ??
+        (_streamIndex + 1) % count);
   }
 
   /// Starts over with every source, as when the channel was opened.
   void _retry() {
-    _broken.clear();
-    _play(0);
+    _failedNow.clear();
+    _play(StreamHealth.firstSource(_urls,
+        lastGood: StreamHealth.lastGood(widget.channel.key)));
   }
 
   void _checkStall() {
@@ -305,6 +302,62 @@ class _PlayerState extends State<Player> {
     _showControls();
   }
 
+  /// Opens the next (+1) or previous (-1) channel of the row or grid this
+  /// one was picked from, wrapping around.
+  void _switchChannel(int step) {
+    final list = widget.channels;
+    final index = list.indexWhere((c) => c.key == widget.channel.key);
+    if (list.length < 2 || index < 0) return;
+    _openChannel(list[(index + step) % list.length]);
+  }
+
+  /// Lists the channels of the row or grid to jump to one directly.
+  Future<void> _chooseChannel() async {
+    _hideTimer?.cancel();
+    final list = widget.channels;
+    final picked = await showDialog<Channel>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Channels'),
+        children: [
+          for (final channel in list)
+            ListTile(
+              autofocus: channel.key == widget.channel.key,
+              leading: Icon(channel.key == widget.channel.key
+                  ? Icons.play_circle_rounded
+                  : Icons.live_tv_rounded),
+              title: Text(channel.name),
+              subtitle: channel.languages.isEmpty
+                  ? null
+                  : Text(channel.languages.first),
+              onTap: () => Navigator.pop(context, channel),
+            ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (picked != null && picked.key != widget.channel.key) {
+      _openChannel(picked);
+    } else {
+      _showControls(focusPlayPause: Device.isTv);
+    }
+  }
+
+  /// Replaces this player with one for [channel], keeping the same list.
+  void _openChannel(Channel channel) {
+    widget.library.markWatched(channel.key);
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        transitionDuration: Duration.zero,
+        pageBuilder: (context, _, __) => Player(
+            channel: channel,
+            library: widget.library,
+            channels: widget.channels),
+      ),
+    );
+  }
+
   /// Lists the channel's sources so the user can pick one; sources that
   /// did not work are marked.
   Future<void> _chooseSource() async {
@@ -323,10 +376,14 @@ class _PlayerState extends State<Player> {
                   : Icons.circle_outlined),
               title: Text('Source ${i + 1} · ${streams[i].label}'),
               subtitle: i == _streamIndex && !_channelNotFound
-                  ? const Text('Playing now')
-                  : _broken.contains(i)
-                      ? const Text('Did not work last time')
-                      : null,
+                  ? Text(_isLoading ? 'Connecting now' : 'Playing now')
+                  : _failedNow.contains(i)
+                      ? const Text(
+                          'Did not work just now · you can still try it')
+                      : StreamHealth.isBad(streams[i].url)
+                          ? const Text(
+                              'Did not work last time · you can still try it')
+                          : null,
               onTap: () => Navigator.pop(context, i),
             ),
         ],
@@ -421,6 +478,22 @@ class _PlayerState extends State<Player> {
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (_channelUpKeys.contains(key)) {
+      _switchChannel(1);
+      return KeyEventResult.handled;
+    }
+    if (_channelDownKeys.contains(key)) {
+      _switchChannel(-1);
+      return KeyEventResult.handled;
+    }
+    if (_showOverlay &&
+        !_controlsVisible &&
+        (key == LogicalKeyboardKey.arrowLeft ||
+            key == LogicalKeyboardKey.arrowRight)) {
+      _switchChannel(key == LogicalKeyboardKey.arrowRight ? 1 : -1);
+      return KeyEventResult.handled;
+    }
     if (_channelNotFound && _screenFocus.hasPrimaryFocus) {
       // Nothing is focused on the error screen yet: go to "Try again".
       _retryFocus.requestFocus();
@@ -471,7 +544,9 @@ class _PlayerState extends State<Player> {
     _retryFocus.dispose();
     _nextSourceFocus.dispose();
     _playPauseFocus.dispose();
-    _restoreSystemUi();
+    // TVs have no system bars to bring back, and when changing channel the
+    // next player has already set its own screen mode.
+    if (!Device.isTv) _restoreSystemUi();
     super.dispose();
   }
 
@@ -566,22 +641,35 @@ class _PlayerState extends State<Player> {
       );
     } else {
       final ratio = controller.value.aspectRatio;
-      video = Center(
-        child: FractionallySizedBox(
-          widthFactor: _size.factor,
-          heightFactor: _size.factor,
-          child: Center(
-            child: AspectRatio(
-              aspectRatio: ratio > 0 ? ratio : 16 / 9,
-              // The video is only a picture: the remote and taps go to
-              // the controls, never to the native video view.
-              child: ExcludeFocus(
-                child: IgnorePointer(child: VideoPlayer(controller)),
-              ),
-            ),
-          ),
-        ),
+      // The video is only a picture: the remote and taps go to the
+      // controls, never to the native video view.
+      final picture = ExcludeFocus(
+        child: IgnorePointer(child: VideoPlayer(controller)),
       );
+      final videoSize = controller.value.size;
+      video = _size == _PictureSize.zoom && !videoSize.isEmpty
+          ? ClipRect(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: videoSize.width,
+                  height: videoSize.height,
+                  child: picture,
+                ),
+              ),
+            )
+          : Center(
+              child: FractionallySizedBox(
+                widthFactor: _size.factor,
+                heightFactor: _size.factor,
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: ratio > 0 ? ratio : 16 / 9,
+                    child: picture,
+                  ),
+                ),
+              ),
+            );
     }
 
     return GestureDetector(
@@ -687,6 +775,13 @@ class _PlayerState extends State<Player> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Also tells you where channel up/down landed.
+          Text(
+            widget.channel.name,
+            style: const TextStyle(
+                fontSize: 28, fontWeight: FontWeight.w700, color: Colors.white),
+          ),
+          const SizedBox(height: 20),
           const CircularProgressIndicator(),
           const SizedBox(height: 20),
           Text(
@@ -763,6 +858,12 @@ class _PlayerState extends State<Player> {
     final streams = widget.channel.streams;
     return [
       _playPauseButton(focus: focusPlayPause),
+      if (widget.channels.length > 1)
+        _ControlButton(
+          icon: Icons.view_list_rounded,
+          label: 'Channels',
+          onPressed: _chooseChannel,
+        ),
       if (streams.length > 1)
         _ControlButton(
           icon: Icons.high_quality_rounded,
