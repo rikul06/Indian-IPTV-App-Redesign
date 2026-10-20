@@ -57,6 +57,9 @@ Android TV / Google TV remotes and also works on phones.
 - If the picture freezes for 10 seconds or the stream reports an error,
   the player reconnects by itself (twice), then moves on to the channel's
   other sources (all of them, wrapping around) before giving up. A source that does not answer within 15 seconds is skipped.
+- Remembers which source last worked for each channel and starts there;
+  links that failed in the last 12 hours are skipped. While a source
+  connects, **Next source** and **Choose source** let you skip waiting.
 - Video is drawn by Android's own video surface, which is much lighter on
   TV hardware.
 - Streams that need a referrer or user agent (from the playlist's

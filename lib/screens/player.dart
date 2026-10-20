@@ -10,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../model/channel.dart';
 import '../services/device.dart';
 import '../services/library_store.dart';
+import '../services/stream_health.dart';
 
 /// Remote and keyboard keys that toggle play/pause.
 final _playPauseKeys = {
@@ -82,6 +83,7 @@ class _PlayerState extends State<Player> {
   final FocusNode _screenFocus = FocusNode(debugLabel: 'player');
   final FocusNode _playPauseFocus = FocusNode(debugLabel: 'play/pause');
   final FocusNode _retryFocus = FocusNode(debugLabel: 'try again');
+  final FocusNode _nextSourceFocus = FocusNode(debugLabel: 'next source');
 
   /// Sources that did not play, so the automatic fallback skips them and
   /// the source list can mark them.
@@ -117,7 +119,25 @@ class _PlayerState extends State<Player> {
     _loadSize();
     _watchdog =
         Timer.periodic(const Duration(seconds: 2), (_) => _checkStall());
-    _play(0);
+    _play(_firstSource());
+  }
+
+  /// The source that worked last time, otherwise the first one that has
+  /// not failed recently. Recently failed ones are skipped by the fallback.
+  int _firstSource() {
+    final streams = widget.channel.streams;
+    for (var i = 0; i < streams.length; i++) {
+      if (StreamHealth.isBad(streams[i].url)) _broken.add(i);
+    }
+    // All failed recently: give every one another chance.
+    if (_broken.length == streams.length) _broken.clear();
+    final lastGood = StreamHealth.lastGood(widget.channel.key);
+    final good = streams.indexWhere((s) => s.url == lastGood);
+    if (good >= 0 && !_broken.contains(good)) return good;
+    for (var i = 0; i < streams.length; i++) {
+      if (!_broken.contains(i)) return i;
+    }
+    return 0;
   }
 
   Future<void> _loadSize() async {
@@ -143,6 +163,11 @@ class _PlayerState extends State<Player> {
       _isLoading = true;
       _channelNotFound = false;
     });
+    // On TV, put the remote on "Next source" while this one connects.
+    if (Device.isTv && widget.channel.streams.length > 1) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _nextSourceFocus.requestFocus());
+    }
 
     final stream = widget.channel.streams[index];
     final controller = VideoPlayerController.networkUrl(
@@ -159,7 +184,7 @@ class _PlayerState extends State<Player> {
 
     try {
       // A server that stops answering would otherwise spin forever.
-      await controller.initialize().timeout(const Duration(seconds: 15));
+      await controller.initialize().timeout(const Duration(seconds: 10));
     } catch (_) {
       if (!mounted || generation != _generation) return;
       // Close the failed connection so it stops reporting errors.
@@ -171,6 +196,7 @@ class _PlayerState extends State<Player> {
 
     await controller.play();
     _broken.remove(index);
+    StreamHealth.markGood(widget.channel.key, stream.url);
     setState(() => _isLoading = false);
     if (!reconnect) _showControls(focusPlayPause: Device.isTv);
   }
@@ -179,13 +205,11 @@ class _PlayerState extends State<Player> {
   /// list), and give up only when every source has failed.
   void _playNextOrFail(int index) {
     _broken.add(index);
-    final count = widget.channel.streams.length;
-    for (var step = 1; step < count; step++) {
-      final next = (index + step) % count;
-      if (!_broken.contains(next)) {
-        _play(next);
-        return;
-      }
+    StreamHealth.markBad(widget.channel.streams[index].url);
+    final next = _nextSource(index);
+    if (next != null) {
+      _play(next);
+      return;
     }
     setState(() {
       _isLoading = false;
@@ -194,6 +218,22 @@ class _PlayerState extends State<Player> {
     // Put the remote on "Try again" so the buttons can be reached.
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _retryFocus.requestFocus());
+  }
+
+  /// The next source after [index] that has not failed, wrapping around.
+  int? _nextSource(int index) {
+    final count = widget.channel.streams.length;
+    for (var step = 1; step < count; step++) {
+      final next = (index + step) % count;
+      if (!_broken.contains(next)) return next;
+    }
+    return null;
+  }
+
+  /// "Next source" while connecting: stop waiting on this one.
+  void _skipSource() {
+    final count = widget.channel.streams.length;
+    _play(_nextSource(_streamIndex) ?? (_streamIndex + 1) % count);
   }
 
   /// Starts over with every source, as when the channel was opened.
@@ -386,6 +426,13 @@ class _PlayerState extends State<Player> {
       _retryFocus.requestFocus();
       return KeyEventResult.handled;
     }
+    if (_isLoading &&
+        _screenFocus.hasPrimaryFocus &&
+        widget.channel.streams.length > 1) {
+      // Nothing is focused while connecting yet: go to "Next source".
+      _nextSourceFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
     if (_playPauseKeys.contains(event.logicalKey)) {
       _togglePlay();
       return KeyEventResult.handled;
@@ -422,6 +469,7 @@ class _PlayerState extends State<Player> {
     _disposeController();
     _screenFocus.dispose();
     _retryFocus.dispose();
+    _nextSourceFocus.dispose();
     _playPauseFocus.dispose();
     _restoreSystemUi();
     super.dispose();
@@ -482,7 +530,7 @@ class _PlayerState extends State<Player> {
     final controller = videoPlayerController;
     final Widget video;
     if (_isLoading) {
-      video = const Center(child: CircularProgressIndicator());
+      video = _buildConnecting();
     } else if (_channelNotFound || controller == null) {
       video = Center(
         child: Column(
@@ -626,6 +674,48 @@ class _PlayerState extends State<Player> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Spinner while a source connects, with buttons to skip to another
+  /// source instead of waiting.
+  Widget _buildConnecting() {
+    final streams = widget.channel.streams;
+    final stream = streams[_streamIndex];
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 20),
+          Text(
+            streams.length > 1
+                ? 'Connecting to source ${_streamIndex + 1} of '
+                    '${streams.length} (${stream.quality ?? 'Auto'})…'
+                : 'Connecting…',
+            style: const TextStyle(fontSize: 18, color: Colors.white),
+          ),
+          if (streams.length > 1) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              children: [
+                _ControlButton(
+                  focusNode: _nextSourceFocus,
+                  icon: Icons.skip_next_rounded,
+                  label: 'Next source',
+                  onPressed: _skipSource,
+                ),
+                _ControlButton(
+                  icon: Icons.list_rounded,
+                  label: 'Choose source',
+                  onPressed: _chooseSource,
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/home.dart';
 import 'services/device.dart';
+import 'services/stream_health.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Device.detect();
+  await StreamHealth.load();
   runApp(const M3UPlayer());
 }
 
