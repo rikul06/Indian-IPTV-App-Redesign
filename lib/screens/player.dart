@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,11 +19,10 @@ final _playPauseKeys = {
   LogicalKeyboardKey.space,
 };
 
-/// Keys that only bring the controls back while they are hidden.
+/// Keys that bring the controls back while they are hidden. Up hides them.
 final _wakeKeys = {
   LogicalKeyboardKey.select,
   LogicalKeyboardKey.enter,
-  LogicalKeyboardKey.arrowUp,
   LogicalKeyboardKey.arrowDown,
   LogicalKeyboardKey.arrowLeft,
   LogicalKeyboardKey.arrowRight,
@@ -94,6 +94,10 @@ class _PlayerState extends State<Player> {
   int _reconnects = 0;
   bool _userPaused = false;
 
+  /// Whether the screen is being kept on, so the wakelock is only switched
+  /// when playback starts or stops.
+  bool _wakelockOn = false;
+
   bool get _isPlaying => videoPlayerController?.value.isPlaying ?? false;
   bool get _isStalled =>
       !_userPaused &&
@@ -136,13 +140,21 @@ class _PlayerState extends State<Player> {
     });
 
     final stream = widget.channel.streams[index];
-    final controller = VideoPlayerController.networkUrl(Uri.parse(stream.url),
-        httpHeaders: stream.headers);
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(stream.url),
+      httpHeaders: stream.headers,
+      // Android's own video surface: far lighter than drawing every frame
+      // through Flutter, which matters on a TV's small chip.
+      viewType: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? VideoViewType.platformView
+          : VideoViewType.textureView,
+    );
     videoPlayerController = controller;
     controller.addListener(_onControllerChanged);
 
     try {
-      await controller.initialize();
+      // A server that stops answering would otherwise spin forever.
+      await controller.initialize().timeout(const Duration(seconds: 15));
     } catch (_) {
       if (!mounted || generation != _generation) return;
       _playNextOrFail(index);
@@ -185,7 +197,12 @@ class _PlayerState extends State<Player> {
       return;
     }
     setState(() => _stalledSeconds += 2);
-    if (_stalledSeconds < _stallLimit) return;
+    if (_stalledSeconds >= _stallLimit) _recover();
+  }
+
+  /// Reconnects to the live point of the same stream (twice), then moves
+  /// on to the channel's next stream.
+  void _recover() {
     if (_reconnects < 2) {
       _reconnects++;
       _play(_streamIndex, reconnect: true);
@@ -197,12 +214,19 @@ class _PlayerState extends State<Player> {
   /// Keeps the screen on while the video plays and redraws the
   /// play/pause button when the state changes.
   void _onControllerChanged() {
-    if (_isPlaying) {
-      WakelockPlus.enable();
-    } else {
-      WakelockPlus.disable();
+    final controller = videoPlayerController;
+    if (controller == null || !mounted) return;
+    if (controller.value.hasError && !_isLoading) {
+      // The stream broke: reconnect now rather than waiting for the
+      // freeze watchdog.
+      _recover();
+      return;
     }
-    if (mounted) setState(() {});
+    if (_isPlaying != _wakelockOn) {
+      _wakelockOn = _isPlaying;
+      WakelockPlus.toggle(enable: _wakelockOn);
+    }
+    setState(() {});
   }
 
   void _togglePlay() {
@@ -307,6 +331,11 @@ class _PlayerState extends State<Player> {
       _togglePlay();
       return KeyEventResult.handled;
     }
+    if (_showOverlay && event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      // Up hides the controls; Down brings them back.
+      if (_controlsVisible) _hideControls();
+      return KeyEventResult.handled;
+    }
     if (_showOverlay &&
         !_controlsVisible &&
         _wakeKeys.contains(event.logicalKey)) {
@@ -330,6 +359,7 @@ class _PlayerState extends State<Player> {
     _hideTimer?.cancel();
     _watchdog?.cancel();
     WakelockPlus.disable();
+    _wakelockOn = false;
     _disposeController();
     _screenFocus.dispose();
     _playPauseFocus.dispose();
@@ -427,7 +457,11 @@ class _PlayerState extends State<Player> {
           child: Center(
             child: AspectRatio(
               aspectRatio: ratio > 0 ? ratio : 16 / 9,
-              child: VideoPlayer(controller),
+              // The video is only a picture: the remote and taps go to
+              // the controls, never to the native video view.
+              child: ExcludeFocus(
+                child: IgnorePointer(child: VideoPlayer(controller)),
+              ),
             ),
           ),
         ),
