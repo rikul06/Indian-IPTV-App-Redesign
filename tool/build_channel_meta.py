@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Build assets/data/channel_meta.json from the iptv-org channel database.
 
-The Indian playlist (iptv-org/iptv streams/in.m3u) only carries a tvg-id and a
-name for each stream: no genre, no language, no logo. The app looks every
-tvg-id up in this file to sort channels into genres, filter by language and
-show logos.
+The playlists (iptv-org/iptv streams/in.m3u and the movies, series and sports
+category lists) carry little more than a tvg-id and a name per stream. The app
+looks every tvg-id up in this file to sort channels into genres, filter by
+language and show logos.
 
 Usage: python3 tool/build_channel_meta.py [--country IN] [--playlist URL]
 
 Every channel from the given countries is included, plus every channel the
-given playlists mention (in.m3u carries a few Canadian and British channels).
+given playlists mention (default: the playlists in data/streams.csv).
 """
 
 import argparse
@@ -21,7 +21,13 @@ import re
 import urllib.request
 
 DATABASE = 'https://raw.githubusercontent.com/iptv-org/database/master/data/'
-PLAYLIST = 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/in.m3u'
+# The playlists in data/streams.csv.
+PLAYLISTS = [
+    'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/in.m3u',
+    'https://raw.githubusercontent.com/iptv-org/iptv/gh-pages/categories/movies.m3u',
+    'https://raw.githubusercontent.com/iptv-org/iptv/gh-pages/categories/series.m3u',
+    'https://raw.githubusercontent.com/iptv-org/iptv/gh-pages/categories/sports.m3u',
+]
 OUTPUT = pathlib.Path(__file__).resolve().parent.parent / 'assets/data/channel_meta.json'
 
 # Image.network cannot draw SVG, so prefer bitmap logos.
@@ -57,11 +63,11 @@ def main():
     parser.add_argument('--country', action='append', default=None,
                         help='ISO country code to include (repeatable, default IN)')
     parser.add_argument('--playlist', action='append', default=None,
-                        help='M3U playlist whose channels to include (repeatable, default in.m3u)')
+                        help='M3U playlist whose channels to include (repeatable, default: the app playlists)')
     args = parser.parse_args()
     countries = set(args.country or ['IN'])
     listed = set()
-    for url in args.playlist or [PLAYLIST]:
+    for url in args.playlist or PLAYLISTS:
         listed |= playlist_ids(url)
 
     languages = {r['code']: r['name'] for r in fetch_csv('languages.csv')}

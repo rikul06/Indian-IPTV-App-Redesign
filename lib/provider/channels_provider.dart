@@ -9,8 +9,6 @@ import '../model/genre.dart';
 import '../model/stream_source.dart';
 
 class ChannelsProvider {
-  static const streamsCatalogUrl =
-      'https://raw.githubusercontent.com/kananinirav/Indian-IPTV-App/refs/heads/master/data/streams.csv';
   static const bundledStreamsCatalog = 'data/streams.csv';
   static const channelMetaAsset = 'assets/data/channel_meta.json';
   static const popularityAsset = 'assets/data/popular_channels.txt';
@@ -18,21 +16,9 @@ class ChannelsProvider {
   Map<String, dynamic>? _channelMeta;
   Map<String, Map<Genre, int>>? _popularity;
 
-  /// Playlists to choose from. Falls back to the list bundled with the app
-  /// when the online list cannot be loaded.
-  Future<List<StreamSource>> fetchStreamSources() async {
-    try {
-      final response = await http.get(Uri.parse(streamsCatalogUrl));
-      if (response.statusCode == 200) {
-        final sources = parseStreamSources(response.body);
-        if (sources.isNotEmpty) return sources;
-      }
-    } catch (_) {
-      // Offline or blocked: use the bundled list below.
-    }
-    return parseStreamSources(
-        await rootBundle.loadString(bundledStreamsCatalog));
-  }
+  /// Playlists to choose from, listed in data/streams.csv.
+  Future<List<StreamSource>> fetchStreamSources() async =>
+      parseStreamSources(await rootBundle.loadString(bundledStreamsCatalog));
 
   static List<StreamSource> parseStreamSources(String csv) {
     final sources = <StreamSource>[];

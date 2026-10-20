@@ -28,6 +28,10 @@ Android TV / Google TV remotes and also works on phones.
   **Top channels** row that mixes the leaders of each genre.
 - **Home** has a row per genre with "See all", plus **Continue watching**
   and **Favourites**.
+- **Playlists** button (top right): switch between Indian TV and the
+  worldwide Movies, Shows & series and Sports playlists; the app remembers
+  the last one. Use the English and HD & Full HD filters to find the best
+  English movie and show channels.
 - **Search** by channel name, language or genre.
 - **Logos** for ~99% of channels, and initials on a genre colour when a logo is missing.
 - **No duplicates**: "Zee TV", "Zee TV HD" and the 576p/1080p copies of a
@@ -103,7 +107,7 @@ flutter build apk --release
 
 | File | What it is | How to update |
 |---|---|---|
-| `data/streams.csv` | Playlists to choose from (fetched from the original repo, bundled copy as fallback). | Edit the CSV. |
+| `data/streams.csv` | Playlists to choose from: Indian TV, and iptv-org's worldwide Movies, Shows & series and Sports lists (all free, legal streams). | Edit the CSV, then run the meta script below. |
 | `assets/data/channel_meta.json` | Genre, languages and logo per iptv-org channel id. | `python3 tool/build_channel_meta.py`. A weekly workflow does this automatically. |
 | `assets/data/popular_channels.txt` | Most-watched channels per genre, in order. | Edit the text file; names are matched ignoring case, spaces and HD/SD. |
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/channel.dart';
 import '../model/channel_catalog.dart';
@@ -23,6 +24,8 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  static const _playlistKey = 'playlist';
+
   final ChannelsProvider channelsProvider = ChannelsProvider();
   final LibraryStore library = LibraryStore();
 
@@ -64,7 +67,44 @@ class _HomeState extends State<Home> {
       });
       return;
     }
-    await _loadSource(sources.first);
+    // Open the playlist used last time.
+    String? last;
+    try {
+      last = (await SharedPreferences.getInstance()).getString(_playlistKey);
+    } catch (_) {
+      // Start with the first playlist.
+    }
+    await _loadSource(
+        sources.firstWhere((s) => s.name == last, orElse: () => sources.first));
+  }
+
+  /// A list of the playlists to switch between, easy to use with a remote.
+  Future<void> _choosePlaylist() async {
+    final picked = await showDialog<StreamSource>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Choose a playlist'),
+        children: [
+          for (final source in streamSources)
+            ListTile(
+              autofocus: source == selectedSource,
+              leading: Icon(source == selectedSource
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded),
+              title: Text(source.name),
+              onTap: () => Navigator.pop(context, source),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || picked == selectedSource) return;
+    await _loadSource(picked);
+    try {
+      await (await SharedPreferences.getInstance())
+          .setString(_playlistKey, picked.name);
+    } catch (_) {
+      // Not remembered; the playlist still loads.
+    }
   }
 
   Future<void> _loadSource(StreamSource source) async {
@@ -173,18 +213,13 @@ class _HomeState extends State<Home> {
               ),
             ),
           if (streamSources.length > 1)
-            PopupMenuButton<StreamSource>(
-              tooltip: 'Playlist',
-              icon: const Icon(Icons.playlist_play_rounded),
-              onSelected: _loadSource,
-              itemBuilder: (context) => [
-                for (final source in streamSources)
-                  CheckedPopupMenuItem(
-                    value: source,
-                    checked: source == selectedSource,
-                    child: Text(source.name),
-                  ),
-              ],
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                icon: const Icon(Icons.playlist_play_rounded),
+                label: const Text('Playlists'),
+                onPressed: _choosePlaylist,
+              ),
             ),
         ],
       ),

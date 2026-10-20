@@ -1,3 +1,5 @@
 name,stream
 Indian TV,https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/in.m3u
-Sports,https://iptv-org.github.io/iptv/categories/sports.m3u
+Movies (worldwide),https://raw.githubusercontent.com/iptv-org/iptv/gh-pages/categories/movies.m3u
+Shows & series (worldwide),https://raw.githubusercontent.com/iptv-org/iptv/gh-pages/categories/series.m3u
+Sports (worldwide),https://raw.githubusercontent.com/iptv-org/iptv/gh-pages/categories/sports.m3u
