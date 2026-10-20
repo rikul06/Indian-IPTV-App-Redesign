@@ -44,7 +44,7 @@ Android TV / Google TV remotes and also works on phones.
 
 **Player**
 - One row of buttons, easy with a TV remote: **Play/Pause**, **Source**
-  (next stream of the channel), **Size** (Full / Large / Medium / Small,
+  (a list of the channel's streams to pick from; ones that failed are marked), **Size** (Full / Large / Medium / Small,
   remembered; smaller looks sharper for low-resolution channels on a big
   TV), **Open in VLC** and **Favourite**. No pop-up menus.
 - Remote: **Down** (or OK) shows the controls, **Up** hides them, **OK**
@@ -52,7 +52,7 @@ Android TV / Google TV remotes and also works on phones.
   leaves. Controls fade after 5 seconds.
 - If the picture freezes for 10 seconds or the stream reports an error,
   the player reconnects by itself (twice), then moves on to the channel's
-  next source. A source that does not answer within 15 seconds is skipped.
+  other sources (all of them, wrapping around) before giving up. A source that does not answer within 15 seconds is skipped.
 - Video is drawn by Android's own video surface, which is much lighter on
   TV hardware.
 - Streams that need a referrer or user agent (from the playlist's

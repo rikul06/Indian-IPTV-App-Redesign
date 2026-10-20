@@ -81,6 +81,11 @@ class _PlayerState extends State<Player> {
   Timer? _hideTimer;
   final FocusNode _screenFocus = FocusNode(debugLabel: 'player');
   final FocusNode _playPauseFocus = FocusNode(debugLabel: 'play/pause');
+  final FocusNode _retryFocus = FocusNode(debugLabel: 'try again');
+
+  /// Sources that did not play, so the automatic fallback skips them and
+  /// the source list can mark them.
+  final Set<int> _broken = {};
 
   /// Keeps the video widget alive when it moves between the normal and
   /// full-screen layouts.
@@ -157,26 +162,44 @@ class _PlayerState extends State<Player> {
       await controller.initialize().timeout(const Duration(seconds: 15));
     } catch (_) {
       if (!mounted || generation != _generation) return;
+      // Close the failed connection so it stops reporting errors.
+      _disposeController();
       _playNextOrFail(index);
       return;
     }
     if (!mounted || generation != _generation) return;
 
     await controller.play();
+    _broken.remove(index);
     setState(() => _isLoading = false);
     if (!reconnect) _showControls(focusPlayPause: Device.isTv);
   }
 
-  /// This stream is down: try the next one, if any.
+  /// This source is down: try the next working one (wrapping around the
+  /// list), and give up only when every source has failed.
   void _playNextOrFail(int index) {
-    if (index + 1 < widget.channel.streams.length) {
-      _play(index + 1);
-    } else {
-      setState(() {
-        _isLoading = false;
-        _channelNotFound = true;
-      });
+    _broken.add(index);
+    final count = widget.channel.streams.length;
+    for (var step = 1; step < count; step++) {
+      final next = (index + step) % count;
+      if (!_broken.contains(next)) {
+        _play(next);
+        return;
+      }
     }
+    setState(() {
+      _isLoading = false;
+      _channelNotFound = true;
+    });
+    // Put the remote on "Try again" so the buttons can be reached.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _retryFocus.requestFocus());
+  }
+
+  /// Starts over with every source, as when the channel was opened.
+  void _retry() {
+    _broken.clear();
+    _play(0);
   }
 
   void _checkStall() {
@@ -216,7 +239,7 @@ class _PlayerState extends State<Player> {
   void _onControllerChanged() {
     final controller = videoPlayerController;
     if (controller == null || !mounted) return;
-    if (controller.value.hasError && !_isLoading) {
+    if (controller.value.hasError && !_isLoading && !_channelNotFound) {
       // The stream broke: reconnect now rather than waiting for the
       // freeze watchdog.
       _recover();
@@ -242,8 +265,39 @@ class _PlayerState extends State<Player> {
     _showControls();
   }
 
-  void _nextQuality() {
-    _play((_streamIndex + 1) % widget.channel.streams.length);
+  /// Lists the channel's sources so the user can pick one; sources that
+  /// did not work are marked.
+  Future<void> _chooseSource() async {
+    _hideTimer?.cancel();
+    final streams = widget.channel.streams;
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Choose a source'),
+        children: [
+          for (var i = 0; i < streams.length; i++)
+            ListTile(
+              autofocus: i == _streamIndex,
+              leading: Icon(i == _streamIndex && !_channelNotFound
+                  ? Icons.play_circle_rounded
+                  : Icons.circle_outlined),
+              title: Text('Source ${i + 1} · ${streams[i].label}'),
+              subtitle: i == _streamIndex && !_channelNotFound
+                  ? const Text('Playing now')
+                  : _broken.contains(i)
+                      ? const Text('Did not work last time')
+                      : null,
+              onTap: () => Navigator.pop(context, i),
+            ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (picked != null && (picked != _streamIndex || _channelNotFound)) {
+      _play(picked);
+    } else {
+      _showControls(focusPlayPause: Device.isTv);
+    }
   }
 
   Future<void> _nextSize() async {
@@ -327,6 +381,11 @@ class _PlayerState extends State<Player> {
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (_channelNotFound && _screenFocus.hasPrimaryFocus) {
+      // Nothing is focused on the error screen yet: go to "Try again".
+      _retryFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
     if (_playPauseKeys.contains(event.logicalKey)) {
       _togglePlay();
       return KeyEventResult.handled;
@@ -362,6 +421,7 @@ class _PlayerState extends State<Player> {
     _wakelockOn = false;
     _disposeController();
     _screenFocus.dispose();
+    _retryFocus.dispose();
     _playPauseFocus.dispose();
     _restoreSystemUi();
     super.dispose();
@@ -394,6 +454,8 @@ class _PlayerState extends State<Player> {
         body: Focus(
           focusNode: _screenFocus,
           autofocus: true,
+          // Only catches remote keys; the arrows never move onto it.
+          skipTraversal: true,
           onKeyEvent: _onKey,
           child: _fullScreen
               ? _buildVideoArea()
@@ -433,11 +495,17 @@ class _PlayerState extends State<Player> {
               spacing: 12,
               children: [
                 _ControlButton(
-                  autofocus: true,
+                  focusNode: _retryFocus,
                   icon: Icons.refresh_rounded,
                   label: 'Try again',
-                  onPressed: () => _play(0),
+                  onPressed: _retry,
                 ),
+                if (widget.channel.streams.length > 1)
+                  _ControlButton(
+                    icon: Icons.list_rounded,
+                    label: 'Choose source',
+                    onPressed: _chooseSource,
+                  ),
                 _ControlButton(
                   icon: Icons.open_in_new_rounded,
                   label: 'Open in VLC',
@@ -609,7 +677,7 @@ class _PlayerState extends State<Player> {
         _ControlButton(
           icon: Icons.high_quality_rounded,
           label: 'Source ${_streamIndex + 1}/${streams.length}',
-          onPressed: _nextQuality,
+          onPressed: _chooseSource,
         ),
       _ControlButton(
         icon: Icons.aspect_ratio_rounded,
@@ -678,7 +746,6 @@ class _ControlButton extends StatefulWidget {
   final VoidCallback onPressed;
   final Color iconColor;
   final FocusNode? focusNode;
-  final bool autofocus;
 
   const _ControlButton({
     required this.icon,
@@ -686,7 +753,6 @@ class _ControlButton extends StatefulWidget {
     this.label,
     this.iconColor = Colors.white,
     this.focusNode,
-    this.autofocus = false,
   });
 
   @override
@@ -701,7 +767,6 @@ class _ControlButtonState extends State<_ControlButton> {
     final label = widget.label;
     return InkWell(
       focusNode: widget.focusNode,
-      autofocus: widget.autofocus,
       borderRadius: BorderRadius.circular(28),
       focusColor: Colors.transparent,
       onTap: widget.onPressed,
