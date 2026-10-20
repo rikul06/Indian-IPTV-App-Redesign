@@ -126,6 +126,7 @@ class ChannelsProvider {
     final builders = <String, _ChannelBuilder>{};
     Map<String, String>? attributes;
     String? title;
+    var headers = <String, String>{};
 
     for (final rawLine in const LineSplitter().convert(text)) {
       final line = rawLine.trim();
@@ -134,12 +135,21 @@ class ChannelsProvider {
           for (final m in _attribute.allMatches(line)) m.group(1)!: m.group(2)!
         };
         title = _extractTitle(line);
+        headers = {};
+      } else if (line.startsWith('#EXTVLCOPT:http-referrer=')) {
+        // Some streams only play when they look like they come from the
+        // channel's website or a browser.
+        headers['Referer'] = line.substring(line.indexOf('=') + 1);
+      } else if (line.startsWith('#EXTVLCOPT:http-user-agent=')) {
+        headers['User-Agent'] = line.substring(line.indexOf('=') + 1);
       } else if (line.isNotEmpty && !line.startsWith('#')) {
         if (title != null && title.isNotEmpty) {
-          _addEntry(builders, attributes ?? const {}, title, line, meta);
+          _addEntry(
+              builders, attributes ?? const {}, title, line, headers, meta);
         }
         attributes = null;
         title = null;
+        headers = {};
       }
     }
 
@@ -170,6 +180,7 @@ class ChannelsProvider {
     Map<String, String> attributes,
     String title,
     String url,
+    Map<String, String> headers,
     Map<String, dynamic> meta,
   ) {
     final quality = _quality.firstMatch(title)?.group(1);
@@ -219,6 +230,7 @@ class ChannelsProvider {
     if (builder.streams.any((s) => s.url == url)) return;
     builder.streams.add(StreamVariant(
       url: url,
+      headers: headers,
       quality: quality ?? (isHdName ? 'HD' : null),
       geoBlocked: tags.contains('geo-blocked'),
       notAlwaysOn: tags.contains('not 24/7'),

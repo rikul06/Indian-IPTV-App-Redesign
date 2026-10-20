@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -27,6 +28,21 @@ final _wakeKeys = {
   LogicalKeyboardKey.arrowRight,
 };
 
+/// How much of the screen the picture fills. Smaller looks sharper for
+/// low-resolution channels on a big TV.
+enum _PictureSize {
+  full('Full', 1),
+  large('Large', 0.85),
+  medium('Medium', 0.7),
+  small('Small', 0.55);
+
+  const _PictureSize(this.label, this.factor);
+  final String label;
+  final double factor;
+
+  _PictureSize get next => values[(index + 1) % values.length];
+}
+
 class Player extends StatefulWidget {
   final Channel channel;
   final LibraryStore library;
@@ -38,6 +54,14 @@ class Player extends StatefulWidget {
 }
 
 class _PlayerState extends State<Player> {
+  static const _sizeKey = 'picture_size';
+
+  /// Seconds the picture may stay frozen before the stream is reconnected.
+  static const _stallLimit = 10;
+
+  /// The last picture size, kept for the next channel.
+  static _PictureSize _size = _PictureSize.full;
+
   VideoPlayerController? videoPlayerController;
   bool _isLoading = true;
   bool _channelNotFound = false;
@@ -62,26 +86,58 @@ class _PlayerState extends State<Player> {
   /// full-screen layouts.
   final GlobalKey _videoKey = GlobalKey();
 
+  /// Watches for a frozen picture: live streams often stall after a few
+  /// minutes, and reconnecting jumps back to the live point.
+  Timer? _watchdog;
+  Duration _lastPosition = Duration.zero;
+  int _stalledSeconds = 0;
+  int _reconnects = 0;
+  bool _userPaused = false;
+
   bool get _isPlaying => videoPlayerController?.value.isPlaying ?? false;
+  bool get _isStalled =>
+      !_userPaused &&
+      ((videoPlayerController?.value.isBuffering ?? false) ||
+          _stalledSeconds >= 4);
+  bool get _showOverlay => !_isLoading && !_channelNotFound;
 
   @override
   void initState() {
     super.initState();
     if (_fullScreen) _applySystemUi();
+    _loadSize();
+    _watchdog =
+        Timer.periodic(const Duration(seconds: 2), (_) => _checkStall());
     _play(0);
   }
 
-  Future<void> _play(int index) async {
+  Future<void> _loadSize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_sizeKey);
+      final size = _PictureSize.values.where((s) => s.name == saved);
+      if (size.isNotEmpty && mounted) setState(() => _size = size.first);
+    } catch (_) {
+      // Keep the current size.
+    }
+  }
+
+  Future<void> _play(int index, {bool reconnect = false}) async {
     final generation = ++_generation;
     _disposeController();
+    if (!reconnect) _reconnects = 0;
+    _stalledSeconds = 0;
+    _lastPosition = Duration.zero;
+    _userPaused = false;
     setState(() {
       _streamIndex = index;
       _isLoading = true;
       _channelNotFound = false;
     });
 
-    final controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.channel.streams[index].url));
+    final stream = widget.channel.streams[index];
+    final controller = VideoPlayerController.networkUrl(Uri.parse(stream.url),
+        httpHeaders: stream.headers);
     videoPlayerController = controller;
     controller.addListener(_onControllerChanged);
 
@@ -89,29 +145,59 @@ class _PlayerState extends State<Player> {
       await controller.initialize();
     } catch (_) {
       if (!mounted || generation != _generation) return;
-      // This stream is down: try the next quality, if any.
-      if (index + 1 < widget.channel.streams.length) {
-        _play(index + 1);
-      } else {
-        setState(() {
-          _isLoading = false;
-          _channelNotFound = true;
-        });
-      }
+      _playNextOrFail(index);
       return;
     }
     if (!mounted || generation != _generation) return;
 
     await controller.play();
     setState(() => _isLoading = false);
-    _showControls();
+    if (!reconnect) _showControls(focusPlayPause: Device.isTv);
+  }
+
+  /// This stream is down: try the next one, if any.
+  void _playNextOrFail(int index) {
+    if (index + 1 < widget.channel.streams.length) {
+      _play(index + 1);
+    } else {
+      setState(() {
+        _isLoading = false;
+        _channelNotFound = true;
+      });
+    }
+  }
+
+  void _checkStall() {
+    final controller = videoPlayerController;
+    if (controller == null || !controller.value.isInitialized || _userPaused) {
+      _stalledSeconds = 0;
+      return;
+    }
+    final position = controller.value.position;
+    if (position != _lastPosition) {
+      _lastPosition = position;
+      if (_stalledSeconds != 0 || _reconnects != 0) {
+        setState(() {
+          _stalledSeconds = 0;
+          _reconnects = 0;
+        });
+      }
+      return;
+    }
+    setState(() => _stalledSeconds += 2);
+    if (_stalledSeconds < _stallLimit) return;
+    if (_reconnects < 2) {
+      _reconnects++;
+      _play(_streamIndex, reconnect: true);
+    } else {
+      _playNextOrFail(_streamIndex);
+    }
   }
 
   /// Keeps the screen on while the video plays and redraws the
   /// play/pause button when the state changes.
   void _onControllerChanged() {
-    final playing = _isPlaying;
-    if (playing) {
+    if (_isPlaying) {
       WakelockPlus.enable();
     } else {
       WakelockPlus.disable();
@@ -123,11 +209,43 @@ class _PlayerState extends State<Player> {
     final controller = videoPlayerController;
     if (controller == null || !controller.value.isInitialized) return;
     if (controller.value.isPlaying) {
+      _userPaused = true;
       controller.pause();
     } else {
+      _userPaused = false;
       controller.play();
     }
     _showControls();
+  }
+
+  void _nextQuality() {
+    _play((_streamIndex + 1) % widget.channel.streams.length);
+  }
+
+  Future<void> _nextSize() async {
+    setState(() => _size = _size.next);
+    _showControls();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_sizeKey, _size.name);
+    } catch (_) {
+      // Not saved; it still applies until the app closes.
+    }
+  }
+
+  Future<void> _openExternal() async {
+    _userPaused = true;
+    videoPlayerController?.pause();
+    final opened = await Device.openExternal(
+        widget.channel.streams[_streamIndex].url, widget.channel.name);
+    if (!opened && mounted) {
+      _userPaused = false;
+      videoPlayerController?.play();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:
+            Text('No video player found. Install VLC from the Play Store.'),
+      ));
+    }
   }
 
   void _toggleFullScreen() {
@@ -162,8 +280,8 @@ class _PlayerState extends State<Player> {
     SystemChrome.setPreferredOrientations(const []);
   }
 
-  /// Shows the controls and hides them again after a few seconds of
-  /// playback without input.
+  /// Shows the controls and hides them again after 5 seconds without a
+  /// key press or tap, as long as the video plays.
   void _showControls({bool focusPlayPause = false}) {
     _hideTimer?.cancel();
     if (!_controlsVisible) setState(() => _controlsVisible = true);
@@ -171,10 +289,9 @@ class _PlayerState extends State<Player> {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _playPauseFocus.requestFocus());
     }
-    _hideTimer = Timer(const Duration(seconds: 4), () {
+    _hideTimer = Timer(const Duration(seconds: 5), () {
       if (!mounted || !_isPlaying) return;
-      setState(() => _controlsVisible = false);
-      _screenFocus.requestFocus();
+      _hideControls();
     });
   }
 
@@ -190,12 +307,14 @@ class _PlayerState extends State<Player> {
       _togglePlay();
       return KeyEventResult.handled;
     }
-    if (!_controlsVisible && _wakeKeys.contains(event.logicalKey)) {
+    if (_showOverlay &&
+        !_controlsVisible &&
+        _wakeKeys.contains(event.logicalKey)) {
       // First press only reveals the controls, on the play/pause button.
       _showControls(focusPlayPause: true);
       return KeyEventResult.handled;
     }
-    _showControls();
+    if (_controlsVisible) _showControls();
     return KeyEventResult.ignored;
   }
 
@@ -209,6 +328,7 @@ class _PlayerState extends State<Player> {
   void dispose() {
     _generation++;
     _hideTimer?.cancel();
+    _watchdog?.cancel();
     WakelockPlus.disable();
     _disposeController();
     _screenFocus.dispose();
@@ -219,12 +339,19 @@ class _PlayerState extends State<Player> {
 
   @override
   Widget build(BuildContext context) {
-    // On phones, Back leaves full screen before it leaves the player.
+    // Back first hides the controls on TV, and leaves full screen on
+    // phones, before it leaves the player.
+    final backHidesControls = Device.isTv && _showOverlay && _controlsVisible;
     final backExitsFullScreen = _fullScreen && !Device.isTv;
     return PopScope(
-      canPop: !backExitsFullScreen,
+      canPop: !backHidesControls && !backExitsFullScreen,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && backExitsFullScreen) _toggleFullScreen();
+        if (didPop) return;
+        if (backHidesControls) {
+          _hideControls();
+        } else if (backExitsFullScreen) {
+          _toggleFullScreen();
+        }
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -243,7 +370,7 @@ class _PlayerState extends State<Player> {
               : LayoutBuilder(
                   builder: (context, constraints) {
                     // 16:9 across the width, but never more than 60% of the
-                    // height so the details below stay visible.
+                    // height so the buttons below stay visible.
                     final height = (constraints.maxWidth * 9 / 16)
                         .clamp(0.0, constraints.maxHeight * 0.6);
                     return Column(
@@ -272,11 +399,21 @@ class _PlayerState extends State<Player> {
             const Text('Channel not available now',
                 style: TextStyle(fontSize: 22, color: Colors.white)),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              autofocus: true,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try again'),
-              onPressed: () => _play(0),
+            Wrap(
+              spacing: 12,
+              children: [
+                _ControlButton(
+                  autofocus: true,
+                  icon: Icons.refresh_rounded,
+                  label: 'Try again',
+                  onPressed: () => _play(0),
+                ),
+                _ControlButton(
+                  icon: Icons.open_in_new_rounded,
+                  label: 'Open in VLC',
+                  onPressed: _openExternal,
+                ),
+              ],
             ),
           ],
         ),
@@ -284,14 +421,19 @@ class _PlayerState extends State<Player> {
     } else {
       final ratio = controller.value.aspectRatio;
       video = Center(
-        child: AspectRatio(
-          aspectRatio: ratio > 0 ? ratio : 16 / 9,
-          child: VideoPlayer(controller),
+        child: FractionallySizedBox(
+          widthFactor: _size.factor,
+          heightFactor: _size.factor,
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: ratio > 0 ? ratio : 16 / 9,
+              child: VideoPlayer(controller),
+            ),
+          ),
         ),
       );
     }
 
-    final showOverlay = !_isLoading && !_channelNotFound;
     return GestureDetector(
       key: _videoKey,
       behavior: HitTestBehavior.opaque,
@@ -300,16 +442,18 @@ class _PlayerState extends State<Player> {
         fit: StackFit.expand,
         children: [
           ColoredBox(color: Colors.black, child: video),
-          if (showOverlay) _buildControls(),
+          if (_showOverlay && _isStalled)
+            const Center(child: CircularProgressIndicator()),
+          if (_showOverlay) _buildOverlay(),
         ],
       ),
     );
   }
 
-  /// Title bar, big play/pause button and full-screen toggle drawn over the
-  /// video. Hidden controls cannot take focus.
-  Widget _buildControls() {
-    final streams = widget.channel.streams;
+  /// Drawn over the video. Full screen: channel name on top and all the
+  /// buttons in one row at the bottom. Otherwise just play/pause and the
+  /// full-screen button; the rest sits below the video.
+  Widget _buildOverlay() {
     return ExcludeFocus(
       excluding: !_controlsVisible,
       child: IgnorePointer(
@@ -326,73 +470,56 @@ class _PlayerState extends State<Player> {
                   Color(0xB3000000),
                   Color(0x00000000),
                   Color(0x00000000),
-                  Color(0xB3000000),
+                  Color(0xCC000000),
                 ],
-                stops: [0, 0.3, 0.7, 1],
+                stops: [0, 0.25, 0.6, 1],
               ),
             ),
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    if (_fullScreen)
-                      Row(
+                padding: const EdgeInsets.all(16),
+                child: _fullScreen
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _ControlButton(
-                            icon: Icons.arrow_back_rounded,
-                            tooltip: 'Back',
-                            // On phones PopScope turns this into "exit
-                            // full screen"; on TV it closes the player.
-                            onPressed: () => Navigator.maybePop(context),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              widget.channel.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
+                          _buildTitle(),
+                          const Spacer(),
+                          Row(
+                            children: [
+                              const _LiveBadge(),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  clipBehavior: Clip.none,
+                                  child: Row(
+                                    spacing: 10,
+                                    children: _buttons(focusPlayPause: true),
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                          _externalButton(),
-                          _favouriteButton(),
-                          if (streams.length > 1) _qualityButton(),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          const Spacer(),
+                          _playPauseButton(focus: true),
+                          const Spacer(),
+                          Row(
+                            children: [
+                              const _LiveBadge(),
+                              const Spacer(),
+                              _ControlButton(
+                                icon: Icons.fullscreen_rounded,
+                                label: 'Full screen',
+                                onPressed: _toggleFullScreen,
+                              ),
+                            ],
+                          ),
                         ],
                       ),
-                    const Spacer(),
-                    _ControlButton(
-                      focusNode: _playPauseFocus,
-                      icon: _isPlaying
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      tooltip: _isPlaying ? 'Pause' : 'Play',
-                      size: 72,
-                      onPressed: _togglePlay,
-                    ),
-                    const Spacer(),
-                    Row(
-                      children: [
-                        const _LiveBadge(),
-                        const Spacer(),
-                        if (!Device.isTv)
-                          _ControlButton(
-                            icon: _fullScreen
-                                ? Icons.fullscreen_exit_rounded
-                                : Icons.fullscreen_rounded,
-                            tooltip: _fullScreen
-                                ? 'Exit full screen'
-                                : 'Full screen',
-                            onPressed: _toggleFullScreen,
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
               ),
             ),
           ),
@@ -401,65 +528,91 @@ class _PlayerState extends State<Player> {
     );
   }
 
-  /// Hands the stream to VLC or any other installed video app.
-  Widget _externalButton() => _ControlButton(
-        icon: Icons.open_in_new_rounded,
-        tooltip: 'Open in VLC / other player',
-        onPressed: _openExternal,
-      );
-
-  Future<void> _openExternal() async {
-    videoPlayerController?.pause();
-    final opened =
-        await Device.openExternal(widget.channel.streams[_streamIndex].url);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:
-            Text('No video player found. Install VLC from the Play Store.'),
-      ));
-    }
+  Widget _buildTitle() {
+    final stream = widget.channel.streams[_streamIndex];
+    return Row(
+      children: [
+        if (!Device.isTv)
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _ControlButton(
+              icon: Icons.arrow_back_rounded,
+              // PopScope turns this into "exit full screen" on phones.
+              onPressed: () => Navigator.maybePop(context),
+            ),
+          ),
+        Expanded(
+          child: Text(
+            '${widget.channel.name}  ·  ${stream.quality ?? 'Auto'}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
-  Widget _favouriteButton() => ListenableBuilder(
+  /// [focus]: this copy is the one the remote jumps to when the controls
+  /// appear (there can be two on screen, but only one may hold the node).
+  Widget _playPauseButton({bool focus = false}) => _ControlButton(
+        focusNode: focus ? _playPauseFocus : null,
+        icon: _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        label: _isPlaying ? 'Pause' : 'Play',
+        onPressed: _togglePlay,
+      );
+
+  /// Every player action as one row of buttons, the same on TV and phone.
+  List<Widget> _buttons({required bool focusPlayPause}) {
+    final streams = widget.channel.streams;
+    return [
+      _playPauseButton(focus: focusPlayPause),
+      if (streams.length > 1)
+        _ControlButton(
+          icon: Icons.high_quality_rounded,
+          label: 'Source ${_streamIndex + 1}/${streams.length}',
+          onPressed: _nextQuality,
+        ),
+      _ControlButton(
+        icon: Icons.aspect_ratio_rounded,
+        label: 'Size: ${_size.label}',
+        onPressed: _nextSize,
+      ),
+      _ControlButton(
+        icon: Icons.open_in_new_rounded,
+        label: 'Open in VLC',
+        onPressed: _openExternal,
+      ),
+      ListenableBuilder(
         listenable: widget.library,
         builder: (context, _) {
           final favourite = widget.library.isFavourite(widget.channel.key);
           return _ControlButton(
             icon: favourite ? Icons.star_rounded : Icons.star_border_rounded,
-            color: favourite ? const Color(0xFFFFC94D) : Colors.white,
-            tooltip: favourite ? 'Remove from favourites' : 'Add to favourites',
+            iconColor: favourite ? const Color(0xFFFFC94D) : Colors.white,
+            label: favourite ? 'Favourite' : 'Add favourite',
             onPressed: () {
               widget.library.toggleFavourite(widget.channel.key);
               _showControls();
             },
           );
         },
-      );
-
-  Widget _qualityButton() {
-    final streams = widget.channel.streams;
-    return PopupMenuButton<int>(
-      tooltip: 'Quality',
-      onOpened: _hideTimer?.cancel,
-      onSelected: _play,
-      itemBuilder: (context) => [
-        for (var i = 0; i < streams.length; i++)
-          CheckedPopupMenuItem(
-            value: i,
-            checked: i == _streamIndex,
-            child: Text(streams[i].label),
-          ),
-      ],
-      child: const Padding(
-        padding: EdgeInsets.all(10),
-        child: Icon(Icons.high_quality_rounded, color: Colors.white, size: 28),
       ),
-    );
+      if (!Device.isTv && _fullScreen)
+        _ControlButton(
+          icon: Icons.fullscreen_exit_rounded,
+          label: 'Exit full screen',
+          onPressed: _toggleFullScreen,
+        ),
+    ];
   }
 
-  /// Below the video on phones (not full screen): favourite and quality.
+  /// Below the video on phones (not full screen).
   Widget _buildChannelInfo() {
-    final streams = widget.channel.streams;
     final theme = Theme.of(context);
     return ColoredBox(
       color: theme.colorScheme.surface,
@@ -471,19 +624,11 @@ class _PlayerState extends State<Player> {
             Text(widget.channel.languages.join(', '),
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _favouriteButton(),
-              _externalButton(),
-              if (streams.length > 1) _qualityButton(),
-              const Spacer(),
-              FilledButton.tonalIcon(
-                icon: const Icon(Icons.fullscreen_rounded),
-                label: const Text('Full screen'),
-                onPressed: _toggleFullScreen,
-              ),
-            ],
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _buttons(focusPlayPause: false),
           ),
         ],
       ),
@@ -491,23 +636,23 @@ class _PlayerState extends State<Player> {
   }
 }
 
-/// A round icon button for the video overlay with a clear outline when the
-/// TV remote is on it.
+/// A rounded button with an icon and an optional label. Gets a thick white
+/// outline when the TV remote is on it.
 class _ControlButton extends StatefulWidget {
   final IconData icon;
-  final String tooltip;
+  final String? label;
   final VoidCallback onPressed;
-  final double size;
-  final Color color;
+  final Color iconColor;
   final FocusNode? focusNode;
+  final bool autofocus;
 
   const _ControlButton({
     required this.icon,
-    required this.tooltip,
     required this.onPressed,
-    this.size = 28,
-    this.color = Colors.white,
+    this.label,
+    this.iconColor = Colors.white,
     this.focusNode,
+    this.autofocus = false,
   });
 
   @override
@@ -519,29 +664,44 @@ class _ControlButtonState extends State<_ControlButton> {
 
   @override
   Widget build(BuildContext context) {
-    final large = widget.size > 40;
-    return Tooltip(
-      message: widget.tooltip,
-      child: InkWell(
-        focusNode: widget.focusNode,
-        customBorder: const CircleBorder(),
-        focusColor: Colors.transparent,
-        onTap: widget.onPressed,
-        onFocusChange: (focused) => setState(() => _focused = focused),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: EdgeInsets.all(large ? 14 : 10),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: large || _focused
-                ? Colors.black.withValues(alpha: 0.45)
-                : Colors.transparent,
-            border: Border.all(
-              color: _focused ? Colors.white : Colors.transparent,
-              width: 3,
-            ),
+    final label = widget.label;
+    return InkWell(
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      borderRadius: BorderRadius.circular(28),
+      focusColor: Colors.transparent,
+      onTap: widget.onPressed,
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: EdgeInsets.symmetric(
+            horizontal: label == null ? 10 : 18, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          color: _focused
+              ? Colors.white.withValues(alpha: 0.25)
+              : Colors.black.withValues(alpha: 0.55),
+          border: Border.all(
+            color: _focused ? Colors.white : Colors.white24,
+            width: _focused ? 3 : 1,
           ),
-          child: Icon(widget.icon, size: widget.size, color: widget.color),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(widget.icon, size: 26, color: widget.iconColor),
+            if (label != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

@@ -49,6 +49,7 @@
             <data android:mimeType="text/plain"/>
         </intent>
         <!-- Video apps (VLC, MX Player...) for "Open in other player". -->
+        <package android:name="org.videolan.vlc"/>
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:mimeType="video/*"/>

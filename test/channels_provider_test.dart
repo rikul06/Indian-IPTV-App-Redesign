@@ -11,6 +11,8 @@ https://example.com/jhakaas-1080/index.m3u8
 #EXTINF:-1 tvg-id="AajTak.in@SD",Aaj Tak (720p) [Geo-blocked]
 https://example.com/aajtak-geo/index.m3u8
 #EXTINF:-1 tvg-id="AajTak.in@SD",Aaj Tak (480p)
+#EXTVLCOPT:http-referrer=https://www.aajtak.in/
+#EXTVLCOPT:http-user-agent=Mozilla/5.0
 https://example.com/aajtak/index.m3u8
 #EXTINF:-1 tvg-id="" tvg-logo="https://example.com/logo.png" group-title="Movies",Cinema, Classics
 https://example.com/classics/index.m3u8
@@ -84,6 +86,9 @@ void main() {
     final aajTak = byName['Aaj Tak']!;
     expect(aajTak.streams.first.url, 'https://example.com/aajtak/index.m3u8');
     expect(aajTak.streams.last.geoBlocked, isTrue);
+    expect(aajTak.streams.first.headers,
+        {'Referer': 'https://www.aajtak.in/', 'User-Agent': 'Mozilla/5.0'});
+    expect(aajTak.streams.last.headers, isEmpty);
   });
 
   test('takes genre, language and logo from channel metadata', () {

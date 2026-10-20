@@ -25,11 +25,12 @@ class Device {
     }
   }
 
-  /// Opens [url] in another video app (VLC, MX Player...). Returns false
-  /// when no such app is installed.
-  static Future<bool> openExternal(String url) async {
+  /// Opens [url] in VLC, or in another video app when VLC is not
+  /// installed. Returns false when there is no video app at all.
+  static Future<bool> openExternal(String url, String title) async {
     try {
-      return await _channel.invokeMethod<bool>('openExternal', {'url': url}) ??
+      return await _channel.invokeMethod<bool>(
+              'openExternal', {'url': url, 'title': title}) ??
           false;
     } catch (_) {
       return false;

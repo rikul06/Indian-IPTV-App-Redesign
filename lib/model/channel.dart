@@ -5,6 +5,10 @@ import 'genre.dart';
 class StreamVariant {
   final String url;
 
+  /// HTTP headers the stream needs (Referer, User-Agent), from the
+  /// playlist's #EXTVLCOPT lines. Usually empty.
+  final Map<String, String> headers;
+
   /// Resolution from the playlist name, such as "1080p". May be null.
   final String? quality;
   final bool geoBlocked;
@@ -12,6 +16,7 @@ class StreamVariant {
 
   StreamVariant({
     required this.url,
+    this.headers = const {},
     this.quality,
     this.geoBlocked = false,
     this.notAlwaysOn = false,

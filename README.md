@@ -43,14 +43,18 @@ Android TV / Google TV remotes and also works on phones.
 - Full-screen player on TV.
 
 **Player**
-- **Play / Pause** button over the video. On a TV remote: press any button
-  to show the controls, **OK** pauses or plays, and the remote's
-  **play/pause** key works too. The controls fade away after 4 seconds.
-- **Full screen** on phones: tap the button and the video fills the screen
-  in landscape with the system bars hidden. Back or the button returns.
-- Favourite star, quality picker and a LIVE badge on the video.
-- **Open in VLC / other player**: hands the stream to any video app you
-  have installed (VLC, MX Player...), picked from Android's "Open with" list.
+- One row of buttons, easy with a TV remote: **Play/Pause**, **Source**
+  (next stream of the channel), **Size** (Full / Large / Medium / Small,
+  remembered; smaller looks sharper for low-resolution channels on a big
+  TV), **Open in VLC** and **Favourite**. No pop-up menus.
+- Remote: any button shows the controls, **OK** presses, **⏯** pauses,
+  **Back** hides the controls and then leaves. Controls fade after 5 seconds.
+- If the picture freezes for 10 seconds, the player reconnects by itself
+  (twice), then moves on to the channel's next source.
+- Streams that need a referrer or user agent (from the playlist's
+  `#EXTVLCOPT` lines) now get them.
+- **Open in VLC** opens VLC directly when installed, otherwise Android's
+  "Open with" list. **Full screen** button on phones.
 
 ## Screenshots
 
