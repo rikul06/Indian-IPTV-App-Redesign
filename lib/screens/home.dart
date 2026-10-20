@@ -301,12 +301,16 @@ class _HomeState extends State<Home> {
                 onSelected: select,
               ),
               Expanded(
-                child: Column(
-                  children: [
-                    languageBar,
-                    const SizedBox(height: 4),
-                    Expanded(child: content),
-                  ],
+                // Rows that scroll left stop at the menu's edge instead of
+                // drawing over it.
+                child: ClipRect(
+                  child: Column(
+                    children: [
+                      languageBar,
+                      const SizedBox(height: 4),
+                      Expanded(child: content),
+                    ],
+                  ),
                 ),
               ),
             ],
