@@ -8,54 +8,62 @@ jobs:
       - run: pip install playwright && python -m playwright install --with-deps chromium
       - run: |
           cat > check.py <<'PY'
-          import re, json, urllib.request, http.server, threading, functools
+          import re, json, urllib.request, http.server, threading
           from playwright.sync_api import sync_playwright
           H = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
                'Accept-Language': 'en-US,en;q=0.9', 'Cookie': 'SOCS=CAI; CONSENT=YES+'}
           def get(url):
               return urllib.request.urlopen(urllib.request.Request(url, headers=H), timeout=20).read().decode('utf-8', 'replace')
-          cands = {}
-          lines = open('assets/data/youtube_live.m3u').read().splitlines()
-          for i, l in enumerate(lines):
-              if l.startswith('https://'):
-                  name = lines[i-1].split(',', 1)[1]
-                  cands[name] = [l.split('youtube.com/')[1].rsplit('/live', 1)[0]]
-          cands['Times Now Navbharat'] += ['@timesnownavbharat', '@TimesNowNavbharat', '@TNNavbharat']
-          cands['DD National'] += ['@DDNational', '@doordarshannational', '@DDNationalOfficial', 'user/doordarshan', 'c/doordarshan']
-          ids = {}
-          for name, hs in cands.items():
-              for h in hs:
+          chans = {'Aaj Tak': 'UCt4t-jeY85JegMlZ-E5UWtA', 'Republic Bharat': 'UC7wXt18f2iA3EDXeqAVuKng', 'ABP News': 'UCRWFSbif-RFENbBrSiez1DA', 'DD News': 'UCKwucPzHZ7zCUIf7If-Wo1g'}
+          tests = [('control video', 'videoId', 'M7lc1UVf-VE'), ('control video nocookie', 'nocookie', 'M7lc1UVf-VE')]
+          for name, cid in chans.items():
+              for path in ['/live', '/streams']:
                   try:
-                      html = get('https://www.youtube.com/' + h)
+                      html = get(f'https://www.youtube.com/channel/{cid}{path}')
                   except Exception as e:
-                      print(f'HANDLE {name} {h}: {e}'); continue
-                  m = re.search(r'"externalId":"(UC[\w-]{22})"', html) or re.search(r'<link rel="canonical" href="https://www.youtube.com/channel/(UC[\w-]{22})"', html)
-                  t = re.search(r'<title>([^<]*)</title>', html)
-                  print(f'HANDLE {name} {h}: {m.group(1) if m else None} title={t.group(1) if t else None}')
-                  if m: ids[name] = (h, m.group(1)); break
-          page = '''<!DOCTYPE html><html><body style="margin:0">
-          <iframe id="player" width="640" height="360" allow="autoplay" src="https://www.youtube.com/embed/live_stream?channel=CHANNEL&enablejsapi=1&autoplay=1&mute=1&controls=0&origin=http://localhost:8765"></iframe>
-          <script>window.result=null;function onYouTubeIframeAPIReady(){new YT.Player('player',{events:{
-            onStateChange:function(e){if(e.data==1)window.result='playing:'+e.target.getVideoData().video_id+':'+e.target.getVideoData().title},
-            onError:function(e){window.result='error:'+e.data}}})}</script>
+                      print(f'PAGE {name}{path}: {e}'); continue
+                  canon = re.search(r'<link rel="canonical" href="([^"]+)"', html)
+                  vids = list(dict.fromkeys(re.findall(r'"videoId":"([\w-]{11})"', html)))[:5]
+                  live = [v for v in vids if re.search(r'"videoId":"%s".{0,3000}?"style":"LIVE"' % re.escape(v), html, re.S)]
+                  ogurl = re.search(r'<meta property="og:url" content="([^"]+)"', html)
+                  bot = 'confirm you' in html
+                  print(f'PAGE {name}{path}: canonical={canon.group(1) if canon else None} og={ogurl.group(1) if ogurl else None} first={vids} liveBadge={live} bot={bot} bytes={len(html)}')
+                  if path == '/live' and vids: tests.append((name + ' /live first id', 'videoId', vids[0]))
+                  if path == '/streams' and live: tests.append((name + ' /streams live id', 'videoId', live[0]))
+              tests.append((name + ' live_stream nocookie', 'channelNocookie', cid))
+          def page(kind, v):
+              if kind == 'videoId':
+                  src = f'https://www.youtube.com/embed/{v}?enablejsapi=1&autoplay=1&mute=1&origin=http://localhost:8765'
+              elif kind == 'nocookie':
+                  src = f'https://www.youtube-nocookie.com/embed/{v}?enablejsapi=1&autoplay=1&mute=1&origin=http://localhost:8765'
+              else:
+                  src = f'https://www.youtube-nocookie.com/embed/live_stream?channel={v}&enablejsapi=1&autoplay=1&mute=1&origin=http://localhost:8765'
+              return f'''<!DOCTYPE html><html><body style="margin:0">
+          <iframe id="player" width="640" height="360" allow="autoplay" src="{src}"></iframe>
+          <script>window.result=null;function onYouTubeIframeAPIReady(){{new YT.Player('player',{{events:{{
+            onStateChange:function(e){{if(e.data==1)window.result='playing:'+e.target.getVideoData().video_id+':'+e.target.getVideoData().title}},
+            onError:function(e){{window.result='error:'+e.data}}}}}})}}</script>
           <script src="https://www.youtube.com/iframe_api"></script></body></html>'''
+          current = {}
           class Handler(http.server.BaseHTTPRequestHandler):
               def do_GET(self):
-                  body = page.replace('CHANNEL', self.path.split('c=')[1]).encode()
+                  body = current['html'].encode()
                   self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
+              def log_message(self, *a): pass
           srv = http.server.ThreadingHTTPServer(('localhost', 8765), Handler)
           threading.Thread(target=srv.serve_forever, daemon=True).start()
           with sync_playwright() as p:
               b = p.chromium.launch(args=['--autoplay-policy=no-user-gesture-required'])
-              for name, (h, cid) in ids.items():
+              for label, kind, v in tests:
+                  current['html'] = page(kind, v)
                   pg = b.new_page()
-                  pg.goto(f'http://localhost:8765/page.html?c={cid}')
+                  pg.goto('http://localhost:8765/page.html')
                   res = None
                   for _ in range(40):
                       pg.wait_for_timeout(500)
                       res = pg.evaluate('window.result')
                       if res: break
-                  print(f'EMBED {name} | {h} | {cid} | {res}')
+                  print(f'EMBED {label} ({v}): {res}')
                   pg.close()
           PY
           python check.py
