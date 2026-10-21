@@ -22,6 +22,9 @@ class YoutubeLive extends ChangeNotifier {
 
   bool get isPlaying => _playing;
 
+  /// YouTube's player state: 1 playing, 2 paused, 3 buffering, -1 unknown.
+  int state = -1;
+
   /// Why the stream did not play, in words, or null.
   String? problem;
 
@@ -81,9 +84,9 @@ class YoutubeLive extends ChangeNotifier {
       _playing = false;
     } else if (message.startsWith('state:')) {
       // 1 = playing, 2 = paused, 3 = buffering.
-      final state = message.substring(6);
-      if (state == '1' && !_started.isCompleted) _started.complete(true);
-      if (state != '3') _playing = state == '1';
+      state = int.tryParse(message.substring(6)) ?? -1;
+      if (state == 1 && !_started.isCompleted) _started.complete(true);
+      if (state != 3) _playing = state == 1;
     }
     notifyListeners();
   }
@@ -144,19 +147,39 @@ class YoutubeLive extends ChangeNotifier {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-  iframe { position: absolute; width: 100%; height: 100%; border: 0; pointer-events: none; }
+  /* YouTube picks the quality from the player's size, and a TV's web view
+     is only about 960x540 web pixels: lay the player out at 1920x1080 and
+     scale it down to fit, so YouTube plays full HD when the network
+     allows. */
+  #box { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px;
+         transform-origin: 0 0; }
+  iframe { width: 1920px; height: 1080px; border: 0; pointer-events: none; }
 </style>
 </head>
 <body>
+<div id="box">
 <iframe id="player" allow="autoplay; encrypted-media"
   referrerpolicy="strict-origin-when-cross-origin"
-  src="https://www.youtube.com/embed/$embed${embed.contains('?') ? '&' : '?'}enablejsapi=1&autoplay=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&playsinline=1&origin=$_origin&widget_referrer=$_origin"></iframe>
+  src="https://www.youtube.com/embed/$embed${embed.contains('?') ? '&' : '?'}enablejsapi=1&autoplay=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&playsinline=1&origin=$_origin&widget_referrer=$_origin&vq=hd1080"></iframe>
+</div>
 <script>
+  function fit() {
+    var scale = Math.min(innerWidth / 1920, innerHeight / 1080);
+    document.getElementById('box').style.transform =
+        'translate(' + (innerWidth - 1920 * scale) / 2 + 'px,' +
+        (innerHeight - 1080 * scale) / 2 + 'px) scale(' + scale + ')';
+  }
+  addEventListener('resize', fit);
+  fit();
+
   var player;
   function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
       events: {
-        onReady: function (e) { e.target.playVideo(); },
+        onReady: function (e) {
+          e.target.setPlaybackQuality('hd1080');
+          e.target.playVideo();
+        },
         onStateChange: function (e) { Player.postMessage('state:' + e.data); },
         onError: function (e) { Player.postMessage('error:' + e.data); }
       }

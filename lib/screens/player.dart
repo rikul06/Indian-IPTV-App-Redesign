@@ -267,6 +267,10 @@ class _PlayerState extends State<Player> {
       _playNextOrFail(_streamIndex);
       return;
     }
+    if (youtube.state == 2 && !_userPaused) {
+      // YouTube paused by itself (it does when it starts on some TVs).
+      youtube.play();
+    }
     if (_isPlaying != _wakelockOn) {
       _wakelockOn = _isPlaying;
       WakelockPlus.toggle(enable: _wakelockOn);
@@ -693,32 +697,33 @@ class _PlayerState extends State<Player> {
     final controller = videoPlayerController;
     final youtubeView = _youtube?.webView;
     final Widget video;
-    if (_isLoading) {
-      video = youtubeView == null
-          ? _buildConnecting()
-          // The YouTube page has to be on screen to load. Keep it visible
-          // behind the connecting screen so any message YouTube shows can
-          // be read.
-          : Stack(
-              fit: StackFit.expand,
-              children: [
-                _youtubePicture(youtubeView),
-                ColoredBox(color: Colors.black54, child: _buildConnecting()),
-              ],
-            );
-    } else if (youtubeView != null && !_channelNotFound) {
-      video = Center(
-        child: FractionallySizedBox(
-          widthFactor: _size.factor,
-          heightFactor: _size.factor,
-          child: Center(
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: _youtubePicture(youtubeView),
+    if (youtubeView != null && !_channelNotFound) {
+      // One tree while connecting and playing: moving the YouTube view
+      // re-attaches it, and YouTube pauses when that happens.
+      video = Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(
+            child: FractionallySizedBox(
+              widthFactor: _size.factor,
+              heightFactor: _size.factor,
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: _youtubePicture(youtubeView),
+                ),
+              ),
             ),
           ),
-        ),
+          // The YouTube page has to be on screen to load. It shows dimmed
+          // behind the connecting screen so any message from YouTube can
+          // be read.
+          if (_isLoading)
+            ColoredBox(color: Colors.black54, child: _buildConnecting()),
+        ],
       );
+    } else if (_isLoading) {
+      video = _buildConnecting();
     } else if (_channelNotFound || controller == null) {
       video = Center(
         child: Column(
