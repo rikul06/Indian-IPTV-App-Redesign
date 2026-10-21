@@ -13,4 +13,9 @@ void main() {
     expect(
         YoutubeLive.channelId('https://www.youtube.com/@aajtak/live'), isNull);
   });
+
+  test('explains why YouTube refused to play', () {
+    expect(YoutubeLive.describeError(150), contains('other apps'));
+    expect(YoutubeLive.describeError(100), contains('not live'));
+  });
 }

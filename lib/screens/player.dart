@@ -111,6 +111,9 @@ class _PlayerState extends State<Player> {
   final FocusNode _retryFocus = FocusNode(debugLabel: 'try again');
   final FocusNode _nextSourceFocus = FocusNode(debugLabel: 'next source');
 
+  /// Why the YouTube source did not play, shown on the error screen.
+  String? _youtubeProblem;
+
   /// Sources that failed while watching this time; the automatic fallback
   /// does not try them again.
   final Set<int> _failedNow = {};
@@ -221,10 +224,15 @@ class _PlayerState extends State<Player> {
   Future<void> _playYoutube(int index, int generation) async {
     final youtube = YoutubeLive()..addListener(_onYoutubeChanged);
     _youtube = youtube;
+    // YouTube's player is slow to start on a TV.
     final started = await youtube
         .start(widget.channel.streams[index].url)
-        .timeout(const Duration(seconds: 20), onTimeout: () => false);
+        .timeout(const Duration(seconds: 30), onTimeout: () {
+      youtube.problem ??= 'YouTube did not start within 30 seconds';
+      return false;
+    });
     if (!mounted || generation != _generation) return;
+    _youtubeProblem = youtube.problem;
     if (!started) {
       _disposeController();
       _playNextOrFail(index);
@@ -242,6 +250,7 @@ class _PlayerState extends State<Player> {
     final youtube = _youtube;
     if (youtube == null || !mounted) return;
     if (youtube.failed && !_isLoading && !_channelNotFound) {
+      _youtubeProblem = youtube.problem;
       _disposeController();
       _playNextOrFail(_streamIndex);
       return;
@@ -282,6 +291,7 @@ class _PlayerState extends State<Player> {
   /// Starts over with every source, as when the channel was opened.
   void _retry() {
     _failedNow.clear();
+    _youtubeProblem = null;
     _play(StreamHealth.firstSource(_urls,
         lastGood: StreamHealth.lastGood(widget.channel.key)));
   }
@@ -432,8 +442,9 @@ class _PlayerState extends State<Player> {
               subtitle: i == _streamIndex && !_channelNotFound
                   ? Text(_isLoading ? 'Connecting now' : 'Playing now')
                   : _failedNow.contains(i)
-                      ? const Text(
-                          'Did not work just now · you can still try it')
+                      ? Text(streams[i].isYoutube && _youtubeProblem != null
+                          ? 'Did not work just now: $_youtubeProblem'
+                          : 'Did not work just now · you can still try it')
                       : StreamHealth.isBad(streams[i].url)
                           ? const Text(
                               'Did not work last time · you can still try it')
@@ -674,13 +685,14 @@ class _PlayerState extends State<Player> {
     if (_isLoading) {
       video = youtubeView == null
           ? _buildConnecting()
-          // The YouTube page has to be on screen to load; hide it behind
-          // the connecting screen until it plays.
+          // The YouTube page has to be on screen to load. Keep it visible
+          // behind the connecting screen so any message YouTube shows can
+          // be read.
           : Stack(
               fit: StackFit.expand,
               children: [
                 _youtubePicture(youtubeView),
-                ColoredBox(color: Colors.black, child: _buildConnecting()),
+                ColoredBox(color: Colors.black54, child: _buildConnecting()),
               ],
             );
     } else if (youtubeView != null && !_channelNotFound) {
@@ -703,6 +715,15 @@ class _PlayerState extends State<Player> {
           children: [
             const Text('Channel not available now',
                 style: TextStyle(fontSize: 22, color: Colors.white)),
+            if (_youtubeProblem != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                child: Text(
+                  'YouTube: $_youtubeProblem',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16, color: Colors.white70),
+                ),
+              ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 12,

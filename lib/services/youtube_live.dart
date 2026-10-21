@@ -20,6 +20,9 @@ class YoutubeLive extends ChangeNotifier {
 
   bool get isPlaying => _playing;
 
+  /// Why the stream did not play, in words, or null.
+  String? problem;
+
   /// The stream stopped with an error after it had started.
   bool get failed => _failed;
 
@@ -29,7 +32,10 @@ class YoutubeLive extends ChangeNotifier {
   /// not live).
   Future<bool> start(String url) async {
     final channel = channelId(url);
-    if (channel == null) return false;
+    if (channel == null) {
+      problem = 'no YouTube channel in the link';
+      return false;
+    }
     try {
       final webView = WebViewController();
       await webView.setJavaScriptMode(JavaScriptMode.unrestricted);
@@ -44,7 +50,7 @@ class YoutubeLive extends ChangeNotifier {
       this.webView = webView;
       notifyListeners();
     } catch (_) {
-      // No web view on this device.
+      problem = 'this device cannot show YouTube inside the app';
       return false;
     }
     return _started.future;
@@ -56,6 +62,7 @@ class YoutubeLive extends ChangeNotifier {
 
   void _onMessage(String message) {
     if (message.startsWith('error')) {
+      problem = describeError(int.tryParse(message.substring(6)) ?? -1);
       if (!_started.isCompleted) _started.complete(false);
       _failed = true;
       _playing = false;
@@ -67,6 +74,18 @@ class YoutubeLive extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// YouTube's player error codes in words.
+  static String describeError(int code) => switch (code) {
+        100 => 'the channel is not live right now (error 100)',
+        101 ||
+        150 =>
+          'the channel does not allow its live stream in other apps '
+              '(error $code)',
+        152 || 153 => 'YouTube\'s player would not start in this app '
+            '(error $code)',
+        _ => 'YouTube\'s player reported error $code',
+      };
 
   /// The channel id in a `https://www.youtube.com/channel/<id>/live` link.
   static String? channelId(String url) {
