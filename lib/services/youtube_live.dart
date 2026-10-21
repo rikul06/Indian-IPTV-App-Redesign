@@ -53,6 +53,9 @@ class YoutubeLive extends ChangeNotifier {
       final platform = webView.platform;
       if (platform is AndroidWebViewController) {
         await platform.setMediaPlaybackRequiresUserGesture(false);
+        // Lay the page out 1920 web pixels wide (its viewport tag) and zoom
+        // it to fit the screen.
+        await platform.setUseWideViewPort(true);
         // Lets chrome://inspect on a computer connected with adb look
         // inside YouTube's player when it does not play.
         await AndroidWebViewController.enableDebugging(true);
@@ -144,13 +147,14 @@ class YoutubeLive extends ChangeNotifier {
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=1920, user-scalable=no">
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   /* YouTube picks the quality from the player's size, and a TV's web view
      is only about 960x540 web pixels: lay the player out at 1920x1080 and
-     scale it down to fit, so YouTube plays full HD when the network
-     allows. */
+     fit it to the screen, so YouTube plays full HD when the network
+     allows. The viewport tag does the fitting on Android; fit() below
+     covers web views that ignore it. */
   #box { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px;
          transform-origin: 0 0; }
   iframe { width: 1920px; height: 1080px; border: 0; pointer-events: none; }
@@ -164,12 +168,17 @@ class YoutubeLive extends ChangeNotifier {
 </div>
 <script>
   function fit() {
-    var scale = Math.min(innerWidth / 1920, innerHeight / 1080);
+    var width = document.documentElement.clientWidth;
+    var height = document.documentElement.clientHeight;
+    if (!width || !height) return;
+    var scale = Math.min(width / 1920, height / 1080);
     document.getElementById('box').style.transform =
-        'translate(' + (innerWidth - 1920 * scale) / 2 + 'px,' +
-        (innerHeight - 1080 * scale) / 2 + 'px) scale(' + scale + ')';
+        'translate(' + (width - 1920 * scale) / 2 + 'px,' +
+        (height - 1080 * scale) / 2 + 'px) scale(' + scale + ')';
   }
+  // The page can load before the app gives it its final size.
   addEventListener('resize', fit);
+  setInterval(fit, 1000);
   fit();
 
   var player;
