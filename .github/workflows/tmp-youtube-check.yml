@@ -1,0 +1,27 @@
+name: Temporary YouTube live check
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import re, urllib.request
+          lines = open('assets/data/youtube_live.m3u').read().splitlines()
+          for i, line in enumerate(lines):
+              if not line.startswith('https://'): continue
+              name = lines[i-1].split(',', 1)[1]
+              req = urllib.request.Request(line, headers={
+                  'User-Agent': 'Mozilla/5.0 (Linux; Android 12; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+                  'Accept-Language': 'en-US,en;q=0.9',
+                  'Cookie': 'SOCS=CAI; CONSENT=YES+'})
+              try:
+                  html = urllib.request.urlopen(req, timeout=20).read().decode('utf-8', 'replace')
+              except Exception as e:
+                  print(f'RESULT {name}: ERROR {e}'); continue
+              canon = re.search(r'<link rel="canonical" href="([^"]+)"', html)
+              live = '"isLiveNow":true' in html or '"isLive":true' in html
+              embed = re.search(r'"playableInEmbed":(true|false)', html)
+              print(f'RESULT {name}: canonical={canon.group(1) if canon else None} live={live} embeddable={embed.group(1) if embed else None} bytes={len(html)}')
+          PY

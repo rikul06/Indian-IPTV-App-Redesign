@@ -1,0 +1,66 @@
+#EXTM3U
+# Official YouTube live streams of Indian news channels, added to the
+# Indian TV playlist as one more source. Mostly from Free-TV/IPTV's India
+# list. A channel's /live page shows its current live video.
+#EXTINF:-1 tvg-id="AajTak.in" tvg-language="Hindi" group-title="News",Aaj Tak
+https://www.youtube.com/@aajtak/live
+#EXTINF:-1 tvg-id="ABPNews.in" tvg-language="Hindi" group-title="News",ABP News
+https://www.youtube.com/@ABPNEWS/live
+#EXTINF:-1 tvg-id="IndiaTV.in" tvg-language="Hindi" group-title="News",India TV
+https://www.youtube.com/@IndiaTV/live
+#EXTINF:-1 tvg-id="ZeeNews.in" tvg-language="Hindi" group-title="News",Zee News
+https://www.youtube.com/@ZEENews/live
+#EXTINF:-1 tvg-id="RepublicBharat.in" tvg-language="Hindi" group-title="News",Republic Bharat
+https://www.youtube.com/@RepublicBharat/live
+#EXTINF:-1 tvg-id="TV9Bharatvarsh.in" tvg-language="Hindi" group-title="News",TV9 Bharatvarsh
+https://www.youtube.com/@TV9Bharatvarsh/live
+#EXTINF:-1 tvg-id="News18India.in" tvg-language="Hindi" group-title="News",News18 India
+https://www.youtube.com/@News18India/live
+#EXTINF:-1 tvg-id="NDTVIndia.in" tvg-language="Hindi" group-title="News",NDTV India
+https://www.youtube.com/@ndtvindia/live
+#EXTINF:-1 tvg-id="TimesNowNavbharat.in" tvg-language="Hindi" group-title="News",Times Now Navbharat
+https://www.youtube.com/@TimesNowNavbharatOfficial/live
+#EXTINF:-1 tvg-id="News24.in" tvg-language="Hindi" group-title="News",News 24
+https://www.youtube.com/@News24thinkfirst/live
+#EXTINF:-1 tvg-id="GoodNewsToday.in" tvg-language="Hindi" group-title="News",Good News Today
+https://www.youtube.com/@GoodNewsTodayOfficial/live
+#EXTINF:-1 tvg-id="DDNews.in" tvg-language="Hindi" group-title="News",DD News
+https://www.youtube.com/@ddnews/live
+#EXTINF:-1 tvg-id="DDNational.in" tvg-language="Hindi",DD National
+https://www.youtube.com/@doordarshan/live
+#EXTINF:-1 tvg-id="DDKisan.in" tvg-language="Hindi",DD Kisan
+https://www.youtube.com/@DDKisan/live
+#EXTINF:-1 tvg-id="DDUrdu.in" tvg-language="Urdu" group-title="News",DD Urdu
+https://www.youtube.com/@DDUrdu/live
+#EXTINF:-1 tvg-id="DDBharati.in" tvg-language="Hindi",DD Bharati
+https://www.youtube.com/@ddbharati/live
+#EXTINF:-1 tvg-id="DDIndia.in" tvg-language="English" group-title="News",DD India
+https://www.youtube.com/@DDIndia/live
+#EXTINF:-1 tvg-id="IndiaToday.in" tvg-language="English" group-title="News",India Today
+https://www.youtube.com/@IndiaToday/live
+#EXTINF:-1 tvg-id="NDTV24x7.in" tvg-language="English" group-title="News",NDTV 24x7
+https://www.youtube.com/@NDTV/live
+#EXTINF:-1 tvg-id="RepublicTV.in" tvg-language="English" group-title="News",Republic TV
+https://www.youtube.com/@RepublicWorld/live
+#EXTINF:-1 tvg-id="TimesNow.in" tvg-language="English" group-title="News",Times Now
+https://www.youtube.com/@TimesNow/live
+#EXTINF:-1 tvg-id="MirrorNow.in" tvg-language="English" group-title="News",Mirror Now
+https://www.youtube.com/@mirrornow/live
+#EXTINF:-1 tvg-id="WION.in" tvg-language="English" group-title="News",WION
+https://www.youtube.com/@WION/live
+#EXTINF:-1 tvg-id="ABPAnanda.in" tvg-language="Bengali" group-title="News",ABP Ananda
+https://www.youtube.com/@abpananda/live
+#EXTINF:-1 tvg-id="ABPMajha.in" tvg-language="Marathi" group-title="News",ABP Majha
+https://www.youtube.com/@abpmajhatv/live
+#EXTINF:-1 tvg-id="News18Marathi.in" tvg-language="Marathi" group-title="News",News18 Marathi
+https://www.youtube.com/@News18Marathi/live
+#EXTINF:-1 tvg-id="News18Telugu.in" tvg-language="Telugu" group-title="News",News18 Telugu
+https://www.youtube.com/@News18Telugu/live
+#EXTINF:-1 tvg-id="News18UPUttarakhand.in" tvg-language="Hindi" group-title="News",News18 UP Uttarakhand
+https://www.youtube.com/@News18UPUttarakhand/live
+#EXTINF:-1 tvg-id="AsianetNews.in" tvg-language="Malayalam" group-title="News",Asianet News
+https://www.youtube.com/@asianetnews/live
+#EXTINF:-1 tvg-id="AsianetSuvarnaNews.in" tvg-language="Kannada" group-title="News",Asianet Suvarna News
+https://www.youtube.com/@AsianetSuvarnaNews/live
+#EXTINF:-1 tvg-id="AsianetNewsTelugu.in" tvg-language="Telugu" group-title="News",Asianet News Telugu
+https://www.youtube.com/@AsianetNewsTelugu/live
