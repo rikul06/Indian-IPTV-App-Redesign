@@ -5,23 +5,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: pip install playwright && python -m playwright install --with-deps chromium
       - run: |
-          python3 - <<'PY'
-          import re, urllib.request
+          cat > check.py <<'PY'
+          import re, json, urllib.request, http.server, threading, functools
+          from playwright.sync_api import sync_playwright
+          H = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+               'Accept-Language': 'en-US,en;q=0.9', 'Cookie': 'SOCS=CAI; CONSENT=YES+'}
+          def get(url):
+              return urllib.request.urlopen(urllib.request.Request(url, headers=H), timeout=20).read().decode('utf-8', 'replace')
+          cands = {}
           lines = open('assets/data/youtube_live.m3u').read().splitlines()
-          for i, line in enumerate(lines):
-              if not line.startswith('https://'): continue
-              name = lines[i-1].split(',', 1)[1]
-              req = urllib.request.Request(line, headers={
-                  'User-Agent': 'Mozilla/5.0 (Linux; Android 12; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-                  'Accept-Language': 'en-US,en;q=0.9',
-                  'Cookie': 'SOCS=CAI; CONSENT=YES+'})
-              try:
-                  html = urllib.request.urlopen(req, timeout=20).read().decode('utf-8', 'replace')
-              except Exception as e:
-                  print(f'RESULT {name}: ERROR {e}'); continue
-              canon = re.search(r'<link rel="canonical" href="([^"]+)"', html)
-              live = '"isLiveNow":true' in html or '"isLive":true' in html
-              embed = re.search(r'"playableInEmbed":(true|false)', html)
-              print(f'RESULT {name}: canonical={canon.group(1) if canon else None} live={live} embeddable={embed.group(1) if embed else None} bytes={len(html)}')
+          for i, l in enumerate(lines):
+              if l.startswith('https://'):
+                  name = lines[i-1].split(',', 1)[1]
+                  cands[name] = [l.split('youtube.com/')[1].rsplit('/live', 1)[0]]
+          cands['Times Now Navbharat'] += ['@timesnownavbharat', '@TimesNowNavbharat', '@TNNavbharat']
+          cands['DD National'] += ['@DDNational', '@doordarshannational', '@DDNationalOfficial', 'user/doordarshan', 'c/doordarshan']
+          ids = {}
+          for name, hs in cands.items():
+              for h in hs:
+                  try:
+                      html = get('https://www.youtube.com/' + h)
+                  except Exception as e:
+                      print(f'HANDLE {name} {h}: {e}'); continue
+                  m = re.search(r'"externalId":"(UC[\w-]{22})"', html) or re.search(r'<link rel="canonical" href="https://www.youtube.com/channel/(UC[\w-]{22})"', html)
+                  t = re.search(r'<title>([^<]*)</title>', html)
+                  print(f'HANDLE {name} {h}: {m.group(1) if m else None} title={t.group(1) if t else None}')
+                  if m: ids[name] = (h, m.group(1)); break
+          page = '''<!DOCTYPE html><html><body style="margin:0">
+          <iframe id="player" width="640" height="360" allow="autoplay" src="https://www.youtube.com/embed/live_stream?channel=CHANNEL&enablejsapi=1&autoplay=1&mute=1&controls=0&origin=http://localhost:8765"></iframe>
+          <script>window.result=null;function onYouTubeIframeAPIReady(){new YT.Player('player',{events:{
+            onStateChange:function(e){if(e.data==1)window.result='playing:'+e.target.getVideoData().video_id+':'+e.target.getVideoData().title},
+            onError:function(e){window.result='error:'+e.data}}})}</script>
+          <script src="https://www.youtube.com/iframe_api"></script></body></html>'''
+          class Handler(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  body = page.replace('CHANNEL', self.path.split('c=')[1]).encode()
+                  self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
+          srv = http.server.ThreadingHTTPServer(('localhost', 8765), Handler)
+          threading.Thread(target=srv.serve_forever, daemon=True).start()
+          with sync_playwright() as p:
+              b = p.chromium.launch(args=['--autoplay-policy=no-user-gesture-required'])
+              for name, (h, cid) in ids.items():
+                  pg = b.new_page()
+                  pg.goto(f'http://localhost:8765/page.html?c={cid}')
+                  res = None
+                  for _ in range(40):
+                      pg.wait_for_timeout(500)
+                      res = pg.evaluate('window.result')
+                      if res: break
+                  print(f'EMBED {name} | {h} | {cid} | {res}')
+                  pg.close()
           PY
+          python check.py
