@@ -8,9 +8,10 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 /// without its buttons, so the app's controls work the same as for any
 /// other source.
 class YoutubeLive extends ChangeNotifier {
-  /// Where the player page claims to come from; YouTube's embed refuses to
-  /// play without one.
-  static const _origin = 'https://www.youtube.com';
+  /// Who is embedding the player. YouTube needs to know (error 153 without
+  /// it) and refuses its own domain (error 152); apps identify themselves
+  /// as https://<application id>.
+  static const _origin = 'https://com.nk.live_tv';
 
   /// Set once the video id is known; the page plays while this is on screen.
   WebViewController? webView;
@@ -114,7 +115,8 @@ class YoutubeLive extends ChangeNotifier {
 </head>
 <body>
 <iframe id="player" allow="autoplay; encrypted-media"
-  src="https://www.youtube.com/embed/live_stream?channel=$channel&enablejsapi=1&autoplay=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&playsinline=1&origin=$_origin"></iframe>
+  referrerpolicy="strict-origin-when-cross-origin"
+  src="https://www.youtube.com/embed/live_stream?channel=$channel&enablejsapi=1&autoplay=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&playsinline=1&origin=$_origin&widget_referrer=$_origin"></iframe>
 <script>
   var player;
   function onYouTubeIframeAPIReady() {
