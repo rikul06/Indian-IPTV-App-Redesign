@@ -71,7 +71,7 @@ void main() {
         byName['9X Jhakaas']!.streams.map((s) => s.quality), ['1080p', '576p']);
   });
 
-  test('adds a YouTube live stream as the last source', () {
+  test('adds a YouTube live stream as the first source', () {
     final withYoutube = ChannelsProvider.parseM3U('''$playlist
 #EXTINF:-1 tvg-id="AajTak.in" tvg-language="Hindi" group-title="News",Aaj Tak
 https://www.youtube.com/@aajtak/live
@@ -79,9 +79,9 @@ https://www.youtube.com/@aajtak/live
 https://www.youtube.com/@DDKisan/live
 ''', meta);
     final aajTak = withYoutube.firstWhere((c) => c.name == 'Aaj Tak');
-    expect(aajTak.streams.last.isYoutube, isTrue);
-    expect(aajTak.streams.last.label, 'YouTube');
-    expect(aajTak.streams.first.isYoutube, isFalse);
+    expect(aajTak.streams.first.isYoutube, isTrue);
+    expect(aajTak.streams.first.label, 'YouTube');
+    expect(aajTak.streams.skip(1).any((s) => s.isYoutube), isFalse);
     final kisan = withYoutube.firstWhere((c) => c.name == 'DD Kisan');
     expect(kisan.languages, ['Hindi']);
   });

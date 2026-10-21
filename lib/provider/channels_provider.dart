@@ -321,9 +321,10 @@ class _ChannelBuilder {
 
   Channel build(Map<Genre, int> ranks) {
     // Try streams that are reachable from anywhere first, best quality
-    // first, and YouTube last since it plays in a heavier web player.
+    // first. A channel's official YouTube live stream comes before all of
+    // them: it is the most reliable.
     final ordered = [...streams]..sort((a, b) {
-        if (a.isYoutube != b.isYoutube) return a.isYoutube ? 1 : -1;
+        if (a.isYoutube != b.isYoutube) return a.isYoutube ? -1 : 1;
         if (a.geoBlocked != b.geoBlocked) return a.geoBlocked ? 1 : -1;
         if (a.notAlwaysOn != b.notAlwaysOn) return a.notAlwaysOn ? 1 : -1;
         return b.lines.compareTo(a.lines);

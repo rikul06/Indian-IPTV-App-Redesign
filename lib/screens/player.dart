@@ -150,8 +150,19 @@ class _PlayerState extends State<Player> {
     _loadSize();
     _watchdog =
         Timer.periodic(const Duration(seconds: 2), (_) => _checkStall());
-    _play(StreamHealth.firstSource(_urls,
-        lastGood: StreamHealth.lastGood(widget.channel.key)));
+    _play(_firstSource);
+  }
+
+  /// The channel's YouTube live stream when it has one that has not
+  /// failed, else the source that worked last time, else the first one
+  /// that has not failed.
+  int get _firstSource {
+    final youtube = widget.channel.streams
+        .indexWhere((s) => s.isYoutube && !StreamHealth.isBad(s.url));
+    return youtube >= 0
+        ? youtube
+        : StreamHealth.firstSource(_urls,
+            lastGood: StreamHealth.lastGood(widget.channel.key));
   }
 
   List<String> get _urls => [for (final s in widget.channel.streams) s.url];
@@ -293,8 +304,7 @@ class _PlayerState extends State<Player> {
   void _retry() {
     _failedNow.clear();
     _youtubeProblem = null;
-    _play(StreamHealth.firstSource(_urls,
-        lastGood: StreamHealth.lastGood(widget.channel.key)));
+    _play(_firstSource);
   }
 
   void _checkStall() {

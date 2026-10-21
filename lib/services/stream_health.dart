@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StreamHealth {
   static const _badKey = 'bad_streams';
   static const _goodKey = 'good_streams';
+  static const _youtubeResetKey = 'youtube_marks_reset';
 
   /// Failed stream URL -> when it failed (milliseconds since epoch).
   static final Map<String, int> _bad = {};
@@ -29,6 +30,13 @@ class StreamHealth {
         final split = entry.indexOf('|');
         if (split <= 0) continue;
         _good[entry.substring(0, split)] = entry.substring(split + 1);
+      }
+      // Every YouTube source failed until the app identified itself to
+      // YouTube (error 152); forget those marks once.
+      if (prefs.getBool(_youtubeResetKey) != true) {
+        _bad.removeWhere((url, _) => url.contains('youtube.com/'));
+        await prefs.setBool(_youtubeResetKey, true);
+        await _save();
       }
     } catch (_) {
       // Start without history.

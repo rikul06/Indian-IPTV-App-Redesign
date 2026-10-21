@@ -18,6 +18,29 @@ void main() {
     expect(StreamHealth.lastGood('aajtak'), 'http://a/dead');
   });
 
+  test('forgets YouTube failures from before the error 152 fix once', () async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    SharedPreferences.setMockInitialValues({
+      'bad_streams': [
+        '$now|https://www.youtube.com/channel/UC7wXt18f2iA3EDXeqAVuKng/live',
+        '$now|http://d/dead',
+      ],
+    });
+    await StreamHealth.load();
+    expect(
+        StreamHealth.isBad(
+            'https://www.youtube.com/channel/UC7wXt18f2iA3EDXeqAVuKng/live'),
+        isFalse);
+    expect(StreamHealth.isBad('http://d/dead'), isTrue);
+
+    // Later failures are kept.
+    StreamHealth.markBad('https://www.youtube.com/channel/x/live');
+    await Future<void>.delayed(Duration.zero); // let it save
+    await StreamHealth.load();
+    expect(
+        StreamHealth.isBad('https://www.youtube.com/channel/x/live'), isTrue);
+  });
+
   test('a failed stream stays marked until it works again', () async {
     final weekAgo =
         DateTime.now().subtract(const Duration(days: 7)).millisecondsSinceEpoch;
