@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
@@ -37,6 +38,11 @@ class YoutubeLive extends ChangeNotifier {
       problem = 'no YouTube channel in the link';
       return false;
     }
+    // Play the live video itself when the TV can look it up: YouTube's
+    // "channel live stream" embed is refused for some channels running
+    // several live streams.
+    final video = await liveVideoId(channel);
+    debugPrint('YouTube: channel $channel, live video ${video ?? 'not found'}');
     try {
       final webView = WebViewController();
       await webView.setJavaScriptMode(JavaScriptMode.unrestricted);
@@ -50,7 +56,9 @@ class YoutubeLive extends ChangeNotifier {
       }
       await webView.addJavaScriptChannel('Player',
           onMessageReceived: (message) => _onMessage(message.message));
-      await webView.loadHtmlString(_page(channel), baseUrl: _origin);
+      await webView.loadHtmlString(
+          _page(video ?? 'live_stream?channel=$channel'),
+          baseUrl: _origin);
       this.webView = webView;
       notifyListeners();
     } catch (_) {
@@ -92,6 +100,32 @@ class YoutubeLive extends ChangeNotifier {
         _ => 'YouTube\'s player reported error $code',
       };
 
+  /// The id of the video [channel] is streaming live now, from its live
+  /// page, or null when it is not live or YouTube cannot be reached.
+  static Future<String?> liveVideoId(String channel) async {
+    try {
+      final response = await http.get(
+          Uri.parse('https://www.youtube.com/channel/$channel/live'),
+          headers: const {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            // Skips the cookie consent page shown in some countries.
+            'Cookie': 'SOCS=CAI',
+          }).timeout(const Duration(seconds: 10));
+      return videoIdFromPage(response.body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A live page names its video as the canonical address; an offline
+  /// channel's page names the channel instead.
+  static String? videoIdFromPage(String html) => RegExp(
+          r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([\w-]{11})"')
+      .firstMatch(html)
+      ?.group(1);
+
   /// The channel id in a `https://www.youtube.com/channel/<id>/live` link.
   static String? channelId(String url) {
     final segments = Uri.tryParse(url)?.pathSegments ?? const [];
@@ -101,9 +135,9 @@ class YoutubeLive extends ChangeNotifier {
         : null;
   }
 
-  /// YouTube's embedded player showing a channel's current live stream,
-  /// reporting its state to the app.
-  static String _page(String channel) => '''
+  /// YouTube's embedded player for [embed] (a video id, or
+  /// `live_stream?channel=<id>`), reporting its state to the app.
+  static String _page(String embed) => '''
 <!DOCTYPE html>
 <html>
 <head>
@@ -116,7 +150,7 @@ class YoutubeLive extends ChangeNotifier {
 <body>
 <iframe id="player" allow="autoplay; encrypted-media"
   referrerpolicy="strict-origin-when-cross-origin"
-  src="https://www.youtube.com/embed/live_stream?channel=$channel&enablejsapi=1&autoplay=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&playsinline=1&origin=$_origin&widget_referrer=$_origin"></iframe>
+  src="https://www.youtube.com/embed/$embed${embed.contains('?') ? '&' : '?'}enablejsapi=1&autoplay=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&playsinline=1&origin=$_origin&widget_referrer=$_origin"></iframe>
 <script>
   var player;
   function onYouTubeIframeAPIReady() {

@@ -18,4 +18,15 @@ void main() {
     expect(YoutubeLive.describeError(150), contains('other apps'));
     expect(YoutubeLive.describeError(100), contains('not live'));
   });
+
+  test('finds the live video on a channel live page', () {
+    expect(
+        YoutubeLive.videoIdFromPage('<link rel="canonical" '
+            'href="https://www.youtube.com/watch?v=Nq2wYlWFucg">'),
+        'Nq2wYlWFucg');
+    expect(
+        YoutubeLive.videoIdFromPage('<link rel="canonical" '
+            'href="https://www.youtube.com/channel/UCt4t-jeY85JegMlZ-E5UWtA">'),
+        isNull);
+  });
 }
