@@ -43,6 +43,9 @@ class YoutubeLive extends ChangeNotifier {
       final platform = webView.platform;
       if (platform is AndroidWebViewController) {
         await platform.setMediaPlaybackRequiresUserGesture(false);
+        // Lets chrome://inspect on a computer connected with adb look
+        // inside YouTube's player when it does not play.
+        await AndroidWebViewController.enableDebugging(true);
       }
       await webView.addJavaScriptChannel('Player',
           onMessageReceived: (message) => _onMessage(message.message));
@@ -63,6 +66,7 @@ class YoutubeLive extends ChangeNotifier {
   void _onMessage(String message) {
     if (message.startsWith('error')) {
       problem = describeError(int.tryParse(message.substring(6)) ?? -1);
+      debugPrint('YouTube: $problem');
       if (!_started.isCompleted) _started.complete(false);
       _failed = true;
       _playing = false;

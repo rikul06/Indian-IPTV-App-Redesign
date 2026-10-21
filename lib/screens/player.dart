@@ -234,6 +234,7 @@ class _PlayerState extends State<Player> {
     if (!mounted || generation != _generation) return;
     _youtubeProblem = youtube.problem;
     if (!started) {
+      debugPrint('YouTube did not play: $_youtubeProblem');
       _disposeController();
       _playNextOrFail(index);
       return;
