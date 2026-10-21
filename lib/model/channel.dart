@@ -23,6 +23,10 @@ class StreamVariant {
     this.notAlwaysOn = false,
   });
 
+  /// A YouTube live stream, played in YouTube's own player.
+  bool get isYoutube =>
+      url.contains('youtube.com/') || url.contains('youtu.be/');
+
   /// Vertical resolution in lines, 0 when unknown; an "HD" feed counts as 720.
   int get lines => quality == 'HD'
       ? 720

@@ -36,4 +36,15 @@ class Device {
       return false;
     }
   }
+
+  /// Opens [url] in the app that handles it, such as YouTube. Returns false
+  /// when no app can.
+  static Future<bool> openUrl(String url) async {
+    try {
+      return await _channel.invokeMethod<bool>('openUrl', {'url': url}) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

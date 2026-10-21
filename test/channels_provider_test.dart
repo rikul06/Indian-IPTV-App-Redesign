@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ip_tv/model/channel_catalog.dart';
 import 'package:ip_tv/model/genre.dart';
@@ -68,6 +69,29 @@ void main() {
     ]);
     expect(
         byName['9X Jhakaas']!.streams.map((s) => s.quality), ['1080p', '576p']);
+  });
+
+  test('adds a YouTube live stream as the last source', () {
+    final withYoutube = ChannelsProvider.parseM3U('''$playlist
+#EXTINF:-1 tvg-id="AajTak.in" tvg-language="Hindi" group-title="News",Aaj Tak
+https://www.youtube.com/@aajtak/live
+#EXTINF:-1 tvg-id="DDKisan.in" tvg-language="Hindi",DD Kisan
+https://www.youtube.com/@DDKisan/live
+''', meta);
+    final aajTak = withYoutube.firstWhere((c) => c.name == 'Aaj Tak');
+    expect(aajTak.streams.last.isYoutube, isTrue);
+    expect(aajTak.streams.last.label, 'YouTube');
+    expect(aajTak.streams.first.isYoutube, isFalse);
+    final kisan = withYoutube.firstWhere((c) => c.name == 'DD Kisan');
+    expect(kisan.languages, ['Hindi']);
+  });
+
+  test('the bundled YouTube list parses', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final text = await rootBundle.loadString(ChannelsProvider.youtubeLiveAsset);
+    final list = ChannelsProvider.parseM3U(text, const {});
+    expect(list.length, greaterThan(20));
+    expect(list.every((c) => c.streams.single.isYoutube), isTrue);
   });
 
   test('merges the SD and HD versions of a channel', () {

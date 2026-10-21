@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../model/channel.dart';
 import '../services/device.dart';
 import '../services/library_store.dart';
 import '../services/stream_health.dart';
+import '../services/youtube_live.dart';
 
 /// Remote and keyboard keys that toggle play/pause.
 final _playPauseKeys = {
@@ -84,6 +86,10 @@ class _PlayerState extends State<Player> {
   static _PictureSize _size = _PictureSize.full;
 
   VideoPlayerController? videoPlayerController;
+
+  /// Plays the source instead of [videoPlayerController] when it is a
+  /// YouTube live stream.
+  YoutubeLive? _youtube;
   bool _isLoading = true;
   bool _channelNotFound = false;
 
@@ -125,7 +131,9 @@ class _PlayerState extends State<Player> {
   /// when playback starts or stops.
   bool _wakelockOn = false;
 
-  bool get _isPlaying => videoPlayerController?.value.isPlaying ?? false;
+  bool get _isPlaying =>
+      (videoPlayerController?.value.isPlaying ?? false) ||
+      (_youtube?.isPlaying ?? false);
   bool get _isStalled =>
       !_userPaused &&
       ((videoPlayerController?.value.isBuffering ?? false) ||
@@ -175,6 +183,10 @@ class _PlayerState extends State<Player> {
     }
 
     final stream = widget.channel.streams[index];
+    if (stream.isYoutube) {
+      _playYoutube(index, generation);
+      return;
+    }
     final controller = VideoPlayerController.networkUrl(
       Uri.parse(stream.url),
       httpHeaders: stream.headers,
@@ -204,6 +216,41 @@ class _PlayerState extends State<Player> {
     StreamHealth.markGood(widget.channel.key, stream.url);
     setState(() => _isLoading = false);
     if (!reconnect) _showControls(focusPlayPause: Device.isTv);
+  }
+
+  Future<void> _playYoutube(int index, int generation) async {
+    final youtube = YoutubeLive()..addListener(_onYoutubeChanged);
+    _youtube = youtube;
+    final started = await youtube
+        .start(widget.channel.streams[index].url)
+        .timeout(const Duration(seconds: 20), onTimeout: () => false);
+    if (!mounted || generation != _generation) return;
+    if (!started) {
+      _disposeController();
+      _playNextOrFail(index);
+      return;
+    }
+    _failedNow.remove(index);
+    StreamHealth.markGood(
+        widget.channel.key, widget.channel.streams[index].url);
+    setState(() => _isLoading = false);
+    _showControls(focusPlayPause: Device.isTv);
+  }
+
+  /// The YouTube player started, paused or broke.
+  void _onYoutubeChanged() {
+    final youtube = _youtube;
+    if (youtube == null || !mounted) return;
+    if (youtube.failed && !_isLoading && !_channelNotFound) {
+      _disposeController();
+      _playNextOrFail(_streamIndex);
+      return;
+    }
+    if (_isPlaying != _wakelockOn) {
+      _wakelockOn = _isPlaying;
+      WakelockPlus.toggle(enable: _wakelockOn);
+    }
+    setState(() {});
   }
 
   /// This source is down: try the next one, sources that failed last time
@@ -290,6 +337,13 @@ class _PlayerState extends State<Player> {
   }
 
   void _togglePlay() {
+    final youtube = _youtube;
+    if (youtube != null) {
+      _userPaused = youtube.isPlaying;
+      _userPaused ? youtube.pause() : youtube.play();
+      _showControls();
+      return;
+    }
     final controller = videoPlayerController;
     if (controller == null || !controller.value.isInitialized) return;
     if (controller.value.isPlaying) {
@@ -408,17 +462,26 @@ class _PlayerState extends State<Player> {
     }
   }
 
-  Future<void> _openExternal() async {
+  bool get _onYoutube => widget.channel.streams[_streamIndex].isYoutube;
+
+  /// Opens [stream] (by default the current source) in VLC, or a YouTube
+  /// source in the YouTube app.
+  Future<void> _openExternal([StreamVariant? stream]) async {
+    stream ??= widget.channel.streams[_streamIndex];
     _userPaused = true;
     videoPlayerController?.pause();
-    final opened = await Device.openExternal(
-        widget.channel.streams[_streamIndex].url, widget.channel.name);
+    _youtube?.pause();
+    final opened = stream.isYoutube
+        ? await Device.openUrl(stream.url)
+        : await Device.openExternal(stream.url, widget.channel.name);
     if (!opened && mounted) {
       _userPaused = false;
       videoPlayerController?.play();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:
-            Text('No video player found. Install VLC from the Play Store.'),
+      _youtube?.play();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(stream.isYoutube
+            ? 'YouTube app not found.'
+            : 'No video player found. Install VLC from the Play Store.'),
       ));
     }
   }
@@ -530,6 +593,9 @@ class _PlayerState extends State<Player> {
     videoPlayerController?.removeListener(_onControllerChanged);
     videoPlayerController?.dispose();
     videoPlayerController = null;
+    _youtube?.removeListener(_onYoutubeChanged);
+    _youtube?.pause();
+    _youtube = null;
   }
 
   @override
@@ -603,9 +669,33 @@ class _PlayerState extends State<Player> {
 
   Widget _buildVideoArea() {
     final controller = videoPlayerController;
+    final youtubeView = _youtube?.webView;
     final Widget video;
     if (_isLoading) {
-      video = _buildConnecting();
+      video = youtubeView == null
+          ? _buildConnecting()
+          // The YouTube page has to be on screen to load; hide it behind
+          // the connecting screen until it plays.
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                _youtubePicture(youtubeView),
+                ColoredBox(color: Colors.black, child: _buildConnecting()),
+              ],
+            );
+    } else if (youtubeView != null && !_channelNotFound) {
+      video = Center(
+        child: FractionallySizedBox(
+          widthFactor: _size.factor,
+          heightFactor: _size.factor,
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: _youtubePicture(youtubeView),
+            ),
+          ),
+        ),
+      );
     } else if (_channelNotFound || controller == null) {
       video = Center(
         child: Column(
@@ -629,11 +719,23 @@ class _PlayerState extends State<Player> {
                     label: 'Choose source',
                     onPressed: _chooseSource,
                   ),
-                _ControlButton(
-                  icon: Icons.open_in_new_rounded,
-                  label: 'Open in VLC',
-                  onPressed: _openExternal,
-                ),
+                // YouTube's own app may play what its embedded player
+                // could not.
+                for (final stream
+                    in widget.channel.streams.where((s) => s.isYoutube).take(1))
+                  _ControlButton(
+                    icon: Icons.smart_display_rounded,
+                    label: 'Open in YouTube',
+                    onPressed: () => _openExternal(stream),
+                  ),
+                if (widget.channel.streams.any((s) => !s.isYoutube))
+                  _ControlButton(
+                    icon: Icons.open_in_new_rounded,
+                    label: 'Open in VLC',
+                    onPressed: () => _openExternal(_onYoutube
+                        ? widget.channel.streams.firstWhere((s) => !s.isYoutube)
+                        : null),
+                  ),
               ],
             ),
           ],
@@ -687,6 +789,11 @@ class _PlayerState extends State<Player> {
       ),
     );
   }
+
+  /// Like the video, only a picture: the remote stays on the app's buttons.
+  Widget _youtubePicture(WebViewController view) => ExcludeFocus(
+        child: IgnorePointer(child: WebViewWidget(controller: view)),
+      );
 
   /// Drawn over the video. Full screen: channel name on top and all the
   /// buttons in one row at the bottom. Otherwise just play/pause and the
@@ -877,8 +984,8 @@ class _PlayerState extends State<Player> {
       ),
       _ControlButton(
         icon: Icons.open_in_new_rounded,
-        label: 'Open in VLC',
-        onPressed: _openExternal,
+        label: _onYoutube ? 'Open in YouTube' : 'Open in VLC',
+        onPressed: () => _openExternal(),
       ),
       ListenableBuilder(
         listenable: widget.library,

@@ -1,6 +1,7 @@
 package com.nk.live_tv
 
 import android.app.UiModeManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -37,6 +38,15 @@ class MainActivity: FlutterActivity() {
                                 result.success(true)
                             }
                             else -> result.success(false)
+                        }
+                    }
+                    // Opens a link in the app that handles it (YouTube).
+                    "openUrl" -> {
+                        try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(call.argument<String>("url"))))
+                            result.success(true)
+                        } catch (e: ActivityNotFoundException) {
+                            result.success(false)
                         }
                     }
                     else -> result.notImplemented()

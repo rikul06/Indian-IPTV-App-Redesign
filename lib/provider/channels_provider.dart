@@ -14,6 +14,10 @@ class ChannelsProvider {
   static const channelMetaAsset = 'assets/data/channel_meta.json';
   static const popularityAsset = 'assets/data/popular_channels.txt';
 
+  /// Official YouTube live streams of Indian news channels, added to the
+  /// Indian TV playlist as one more source.
+  static const youtubeLiveAsset = 'assets/data/youtube_live.m3u';
+
   /// Where the newest data files live: this repo, refreshed weekly by
   /// .github/workflows/refresh-channel-data.yml.
   static const repoDataUrl =
@@ -53,9 +57,23 @@ class ChannelsProvider {
     }
     final meta = await _loadChannelMeta();
     final popularity = await _loadPopularity();
-    return ChannelCatalog(parseM3U(
-        utf8.decode(response.bodyBytes, allowMalformed: true), meta,
-        popularity: popularity));
+    var playlist = utf8.decode(response.bodyBytes, allowMalformed: true);
+    if (source.streamUrl.endsWith('/in.m3u')) {
+      playlist += '\n${await _loadYoutubeLive()}';
+    }
+    return ChannelCatalog(parseM3U(playlist, meta, popularity: popularity));
+  }
+
+  Future<String> _loadYoutubeLive() async {
+    try {
+      return await latestData(
+          youtubeLiveAsset,
+          (text) => text.contains('#EXTINF')
+              ? text
+              : throw const FormatException('No channels'));
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<Map<String, Map<Genre, int>>> _loadPopularity() async {
@@ -267,7 +285,12 @@ class ChannelsProvider {
     builder.streams.add(StreamVariant(
       url: url,
       headers: headers,
-      quality: quality ?? (isHdName ? 'HD' : null),
+      quality: quality ??
+          (url.contains('youtube.com/')
+              ? 'YouTube'
+              : isHdName
+                  ? 'HD'
+                  : null),
       geoBlocked: tags.contains('geo-blocked'),
       notAlwaysOn: tags.contains('not 24/7'),
     ));
@@ -297,8 +320,10 @@ class _ChannelBuilder {
   });
 
   Channel build(Map<Genre, int> ranks) {
-    // Try streams that are reachable from anywhere first, best quality first.
+    // Try streams that are reachable from anywhere first, best quality
+    // first, and YouTube last since it plays in a heavier web player.
     final ordered = [...streams]..sort((a, b) {
+        if (a.isYoutube != b.isYoutube) return a.isYoutube ? 1 : -1;
         if (a.geoBlocked != b.geoBlocked) return a.geoBlocked ? 1 : -1;
         if (a.notAlwaysOn != b.notAlwaysOn) return a.notAlwaysOn ? 1 : -1;
         return b.lines.compareTo(a.lines);

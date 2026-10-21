@@ -74,6 +74,12 @@ Android TV / Google TV remotes and also works on phones.
   and 3 fail too it goes back to 1. The source list says "Did not work last
   time · you can still try it". While a source connects, **Next source**
   and **Choose source** let you skip waiting.
+- **YouTube live** as one more source for ~30 Indian news channels
+  (Republic Bharat, Aaj Tak, ABP News, India TV, Zee News, NDTV, DD News…),
+  using each channel's official YouTube live stream in YouTube's embedded
+  player. It is tried after the channel's other sources, and the app
+  remembers when it was the one that worked. **Open in YouTube** opens it
+  in the YouTube app instead.
 - Video is drawn by Android's own video surface, which is much lighter on
   TV hardware.
 - Streams that need a referrer or user agent (from the playlist's
@@ -134,6 +140,7 @@ Everything updates without a new APK:
 |---|---|---|
 | `data/streams.csv` | Playlists to choose from: Indian TV, and iptv-org's worldwide Movies, Shows & series and Sports lists (all free, legal streams). | Edit the CSV, then run the meta script below. |
 | `assets/data/channel_meta.json` | Genre, languages and logo per iptv-org channel id. | `python3 tool/build_channel_meta.py`. A weekly workflow does this automatically. |
+| `assets/data/youtube_live.m3u` | Official YouTube live channels (`https://www.youtube.com/channel/<id>/live`), added to the Indian TV playlist. Apps pick it up at next start. | Edit the file. |
 | `assets/data/popular_channels.txt` | Most-watched channels per genre, in order. | Edit the text file; names are matched ignoring case, spaces and HD/SD. Apps pick it up at next start. |
 
 ## Credits
