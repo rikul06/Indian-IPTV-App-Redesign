@@ -77,9 +77,9 @@ Android TV / Google TV remotes and also works on phones.
 - **YouTube live** as one more source for ~30 Indian news channels
   (Republic Bharat, Aaj Tak, ABP News, India TV, Zee News, NDTV, DD News…),
   using each channel's official YouTube live stream in YouTube's embedded
-  player. It is the channel's first source: the app opens on it unless it
-  failed last time, then falls back to the other sources. **Open in
-  YouTube** opens it in the YouTube app instead.
+  player. It is the channel's last source, tried when the others fail;
+  the app remembers when it was the one that worked. **Open in YouTube**
+  opens it in the YouTube app instead.
 - Video is drawn by Android's own video surface, which is much lighter on
   TV hardware.
 - Streams that need a referrer or user agent (from the playlist's
